@@ -34,7 +34,7 @@ Yolov10 Support: Now featuring support for Yolov10 object detection.</PackageRel
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.17.3" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.19.2" />
     <PackageReference Include="SkiaSharp" Version="2.88.8" />
   </ItemGroup>
 
