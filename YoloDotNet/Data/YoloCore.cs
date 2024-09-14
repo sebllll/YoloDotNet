@@ -1,4 +1,6 @@
-﻿namespace YoloDotNet.Data
+﻿using Microsoft.ML.OnnxRuntime;
+
+namespace YoloDotNet.Data
 {
     /// <summary>
     /// Initializes a new instance of the Yolo core class.
@@ -34,9 +36,23 @@
         /// <param name="modelType">The type of the model to be initialized.</param>
         public void InitializeYolo(ModelType modelType)
         {
-            _session = useCuda
-                ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
-                : new InferenceSession(onnxModel);
+            //TODO: controllare per accelerazione
+            //_session = useCuda
+            //    ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
+            //    : new InferenceSession(onnxModel);
+
+            SessionOptions sessionOptions = new SessionOptions();
+
+            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
+            sessionOptions.AppendExecutionProvider_DML(1);
+
+            //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            //sessionOptions.EnableMemoryPattern = false;
+            //sessionOptions.InterOpNumThreads = 0;
+            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+            //sessionOptions.AppendExecutionProvider_DML(1);
+
+            _session = new InferenceSession(onnxModel, sessionOptions);
 
             _runOptions = new RunOptions();
             _ortIoBinding = _session.CreateIoBinding();
