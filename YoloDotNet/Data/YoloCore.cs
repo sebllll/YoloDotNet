@@ -44,7 +44,8 @@ namespace YoloDotNet.Data
             SessionOptions sessionOptions = new SessionOptions();
 
             sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
-            sessionOptions.AppendExecutionProvider_DML(1);
+            int device = useCuda ? 1 : 0;
+            sessionOptions.AppendExecutionProvider_DML(device);
 
             //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
             //sessionOptions.EnableMemoryPattern = false;
