@@ -9,7 +9,7 @@ namespace YoloDotNet.Data
     /// <param name="useCuda">Indicates whether to use CUDA for GPU acceleration.</param>
     /// <param name="allocateGpuMemory">Indicates whether to allocate GPU memory.</param>
     /// <param name="gpuId">The GPU device ID to use when CUDA is enabled.</param>
-    public class YoloCore(string onnxModel, bool useCuda, bool allocateGpuMemory, int gpuId) : IDisposable
+    public class YoloCore(string onnxModel, bool useCuda, bool allocateGpuMemory, int gpuId = 0) : IDisposable
     {
         public event EventHandler VideoStatusEvent = delegate { };
         public event EventHandler VideoProgressEvent = delegate { };
@@ -43,9 +43,15 @@ namespace YoloDotNet.Data
 
             SessionOptions sessionOptions = new SessionOptions();
 
-            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
-            int device = useCuda ? 1 : 0;
-            sessionOptions.AppendExecutionProvider_DML(device);
+            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
+            //int device = useCuda ? 1 : 0;
+
+            sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            sessionOptions.EnableMemoryPattern = false;
+            sessionOptions.InterOpNumThreads = 0;
+            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+            sessionOptions.AppendExecutionProvider_DML(gpuId);
 
             //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
             //sessionOptions.EnableMemoryPattern = false;
