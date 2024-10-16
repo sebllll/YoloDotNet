@@ -35,6 +35,7 @@ OnnxRuntime Update: Now featuring support for CUDA 12.x and cuDNN 9.x. The GPU w
 YoloDotNet v2.1 – faster, smarter, and packed with more Yolo goodness ;)
 
 Repo at: https://github.com/NickSwardh/YoloDotNet</PackageReleaseNotes>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
