@@ -1,6 +1,4 @@
-﻿using Microsoft.ML.OnnxRuntime;
-
-namespace YoloDotNet.Data
+﻿namespace YoloDotNet.Core
 {
     /// <summary>
     /// Initializes a new instance of the Yolo core class.
@@ -9,7 +7,7 @@ namespace YoloDotNet.Data
     /// <param name="useCuda">Indicates whether to use CUDA for GPU acceleration.</param>
     /// <param name="allocateGpuMemory">Indicates whether to allocate GPU memory.</param>
     /// <param name="gpuId">The GPU device ID to use when CUDA is enabled.</param>
-    public class YoloCore(string onnxModel, bool useCuda, bool allocateGpuMemory, int gpuId = 0) : IDisposable
+    public class YoloCore(string onnxModel, bool useCuda, bool allocateGpuMemory, int gpuId) : IDisposable
     {
         public event EventHandler VideoStatusEvent = delegate { };
         public event EventHandler VideoProgressEvent = delegate { };
@@ -36,35 +34,14 @@ namespace YoloDotNet.Data
         /// <param name="modelType">The type of the model to be initialized.</param>
         public void InitializeYolo(YoloOptions yoloOptions)
         {
-            //TODO: controllare per accelerazione
-            //_session = useCuda
-            //    ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
-            //    : new InferenceSession(onnxModel);
-
-            SessionOptions sessionOptions = new SessionOptions();
-
-            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
-            //int device = useCuda ? 1 : 0;
-
-            sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-            sessionOptions.EnableMemoryPattern = false;
-            sessionOptions.InterOpNumThreads = 0;
-            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-
-            sessionOptions.AppendExecutionProvider_DML(gpuId);
-
-            //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-            //sessionOptions.EnableMemoryPattern = false;
-            //sessionOptions.InterOpNumThreads = 0;
-            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            //sessionOptions.AppendExecutionProvider_DML(1);
-
-            _session = new InferenceSession(onnxModel, sessionOptions);
+            _session = useCuda
+                ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
+                : new InferenceSession(onnxModel);
 
             _runOptions = new RunOptions();
             _ortIoBinding = _session.CreateIoBinding();
 
-            OnnxModel = _session.GetOnnxProperties(yoloOptions);
+            OnnxModel = _session.GetOnnxProperties();
             
             VerifyExpectedModelType(yoloOptions.ModelType);
 
@@ -127,8 +104,9 @@ namespace YoloDotNet.Data
         public Dictionary<int, List<T>> RunVideo<T>(
             VideoOptions options,
             double confidence,
+            double pixelConfidence,
             double iouThreshold,
-            Func<SKImage, double, double, List<T>> func) where T : class, new()
+            Func<SKImage, double, double, double, List<T>> func) where T : class, new()
         {
             var output = new Dictionary<int, List<T>>();
 
@@ -139,7 +117,7 @@ namespace YoloDotNet.Data
             _videoHandler.StatusChangeEvent += (sender, e) => VideoStatusEvent?.Invoke(sender, e);
             _videoHandler.FramesExtractedEvent += (sender, e) =>
             {
-                output = RunBatchInferenceOnVideoFrames<T>(_videoHandler, confidence, iouThreshold, func);
+                output = RunBatchInferenceOnVideoFrames<T>(_videoHandler, confidence, pixelConfidence, iouThreshold, func);
 
                 if (options.GenerateVideo)
                     _videoHandler.ProcessVideoPipeline(VideoAction.CompileFrames);
@@ -157,8 +135,10 @@ namespace YoloDotNet.Data
         /// </summary>
         private Dictionary<int, List<T>> RunBatchInferenceOnVideoFrames<T>(
             VideoHandler.VideoHandler _videoHandler,
-            double confidence, double iouThreshold,
-            Func<SKImage, double, double, List<T>> func) where T : class, new()
+            double confidence,
+            double pixelConfidence,
+            double iouThreshold,
+            Func<SKImage, double, double, double, List<T>> func) where T : class, new()
         {
             var frames = _videoHandler.GetExtractedFrames();
             int progressCounter = 0;
@@ -174,7 +154,7 @@ namespace YoloDotNet.Data
                 using var img = SKImage.FromEncodedData(frame);
 
 
-                var results = func.Invoke(img, confidence, iouThreshold);
+                var results = func.Invoke(img, confidence, pixelConfidence, iouThreshold);
                 batch[i] = results;
 
                 if (shouldDrawLabelsOnKeptFrames || shouldDrawLabelsOnVideoFrames)
