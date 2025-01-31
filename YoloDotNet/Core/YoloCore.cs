@@ -34,9 +34,30 @@
         /// <param name="modelType">The type of the model to be initialized.</param>
         public void InitializeYolo(YoloOptions yoloOptions)
         {
-            _session = useCuda
-                ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
-                : new InferenceSession(onnxModel);
+            //TODO: controllare per accelerazione
+            //_session = useCuda
+            //    ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
+            //    : new InferenceSession(onnxModel);
+
+            SessionOptions sessionOptions = new SessionOptions();
+
+            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
+            //int device = useCuda ? 1 : 0;
+
+            sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            sessionOptions.EnableMemoryPattern = false;
+            sessionOptions.InterOpNumThreads = 0;
+            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+            sessionOptions.AppendExecutionProvider_DML(gpuId);
+
+            //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            //sessionOptions.EnableMemoryPattern = false;
+            //sessionOptions.InterOpNumThreads = 0;
+            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+            //sessionOptions.AppendExecutionProvider_DML(1);
+
+            _session = new InferenceSession(onnxModel, sessionOptions);
 
             _runOptions = new RunOptions();
             _ortIoBinding = _session.CreateIoBinding();
