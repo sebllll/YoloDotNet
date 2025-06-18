@@ -15,8 +15,8 @@
         {
             _yoloCore = yoloCore;
 
-            // Yolov11 has the same model input/output shapes as Yolov8
-            // Use Yolov8 module
+            // Yolov11 has the same model input/output shapes as Yolov8  
+            // Use Yolov8 module  
             _segmentationModuleV8 = new SegmentationModuleV8(_yoloCore);
 
             SubscribeToVideoEvents();
@@ -25,10 +25,13 @@
         public List<Segmentation> ProcessImage(SKImage image, double confidence, double pixelConfidence, double iou)
             => _segmentationModuleV8.ProcessImage(image, confidence, pixelConfidence, iou);
 
+        public List<Segmentation> ProcessImage(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => _segmentationModuleV8.ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
+
         public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
             => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, ProcessImage);
 
-        #region Helper methods
+        #region Helper methods  
 
         private void SubscribeToVideoEvents()
         {
