@@ -77,6 +77,19 @@
         /// <returns>A list of Segmentation results.</returns>
         public List<Segmentation> RunSegmentation(SKImage img, double confidence = 0.23, double pixelConfedence = 0.65, double iou = 0.7)
             => ((ISegmentationModule)_detection).ProcessImage(img, confidence, pixelConfedence, iou);
+
+        /// <summary>
+        /// Run segmentation on an image.
+        /// </summary>
+        /// <param name="imageData">The image to segmentate.</param>
+        /// <param name="width">The image width</param>
+        /// <param name="height">The image height</param>
+        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
+        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
+        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
+        /// <returns>A list of Segmentation results.</returns>
+        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
+            => ((ISegmentationModule)_detection).ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
         
         /// <summary>
         /// Run pose estimation on an image.
