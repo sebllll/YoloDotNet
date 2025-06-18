@@ -34,28 +34,23 @@
         /// <param name="modelType">The type of the model to be initialized.</param>
         public void InitializeYolo(YoloOptions yoloOptions)
         {
-            //TODO: controllare per accelerazione
-            //_session = useCuda
-            //    ? new InferenceSession(onnxModel, SessionOptions.MakeSessionOptionWithCudaProvider(gpuId))
-            //    : new InferenceSession(onnxModel);
+            SessionOptions sessionOptions;
+            var executionProvider = "CPU";
 
-            SessionOptions sessionOptions = new SessionOptions();
-
-            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_EXTENDED;
-            //int device = useCuda ? 1 : 0;
+            if (useCuda)
+            {
+                sessionOptions = SessionOptions.MakeSessionOptionWithCudaProvider(gpuId);
+                executionProvider = $"CUDA (GPU: {gpuId})";
+            }
+            else
+            {
+                sessionOptions = new SessionOptions();
+            }
 
             sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
             sessionOptions.EnableMemoryPattern = false;
             sessionOptions.InterOpNumThreads = 0;
             sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-
-            sessionOptions.AppendExecutionProvider_DML(gpuId);
-
-            //sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
-            //sessionOptions.EnableMemoryPattern = false;
-            //sessionOptions.InterOpNumThreads = 0;
-            //sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
-            //sessionOptions.AppendExecutionProvider_DML(1);
 
             _session = new InferenceSession(onnxModel, sessionOptions);
 
@@ -63,6 +58,11 @@
             _ortIoBinding = _session.CreateIoBinding();
 
             OnnxModel = _session.GetOnnxProperties();
+
+            if (OnnxModel.CustomMetaData is null)
+                OnnxModel.CustomMetaData = new();
+
+            OnnxModel.CustomMetaData["ExecutionProvider"] = executionProvider;
             
             VerifyExpectedModelType(yoloOptions.ModelType);
 

@@ -12,6 +12,11 @@
 
         public OnnxModel OnnxModel => _detection.OnnxModel;
 
+        /// <summary>
+        /// Gets the execution provider currently used for inference (e.g., CPU, CUDA).
+        /// </summary>
+        public string ExecutionProvider => OnnxModel.CustomMetaData.TryGetValue("ExecutionProvider", out var provider) ? provider : "Unknown";
+
         #endregion
 
         #region Constructor

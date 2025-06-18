@@ -48,8 +48,10 @@ Need more control? An optional pixel confidence parameter has been added for seg
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.20.1" />
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.20.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="Stride.Graphics" Version="4.2.0.2121" />
+    <PackageReference Include="VL.CoreLib" Version="2025.7.0-0369-g117540fa59" />
   </ItemGroup>
 
 </Project>
