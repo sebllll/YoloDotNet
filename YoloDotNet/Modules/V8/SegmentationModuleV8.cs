@@ -1,4 +1,14 @@
-﻿namespace YoloDotNet.Modules.V8
+﻿using Microsoft.ML.OnnxRuntime;
+using SkiaSharp;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System;
+using YoloDotNet.Core;
+using YoloDotNet.Models;
+using YoloDotNet.Modules.Interfaces;
+using System.Runtime.InteropServices;
+
+namespace YoloDotNet.Modules.V8
 {
     public class SegmentationModuleV8 : ISegmentationModule
     {
@@ -21,11 +31,17 @@
         public List<Segmentation> ProcessImage(SKImage image, double confidence, double pixelConfidence, double iou)
         {
             using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(image);
-            return RunSegmentation(image, ortValues, confidence, pixelConfidence, iou);
+            return RunSegmentation(image.Width, image.Height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public List<Segmentation> ProcessImage(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunSegmentation(width, height, ortValues, confidence, pixelConfidence, iou);
         }
 
         public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
-            => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, ProcessImage);
+            => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, (image, conf, pixConf, iouVal) => ProcessImage(image, conf, pixConf, iouVal));
 
         #region Segmentation
 
@@ -60,12 +76,13 @@
         /// <param name="confidence">The confidence threshold for object detection.</param>
         /// <param name="iou">The Intersection over Union (IoU) threshold for excluding bounding boxes.</param>
         /// <returns>A list of Segmentation objects corresponding to the input bounding boxes.</returns> 
-        private List<Segmentation> RunSegmentation(SKImage image, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
+        private List<Segmentation> RunSegmentation(int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
 
-            var boundingBoxes = _objectDetectionModule.ObjectDetection(image, ortSpan0, confidence, iou);
+            using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
+            var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
             var pixels = new ConcurrentBag<Pixel>();
             var croppedImage = new SKBitmap();
             var resizedBitmap = new SKBitmap();

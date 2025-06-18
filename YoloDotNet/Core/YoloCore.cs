@@ -113,6 +113,93 @@
         }
 
         /// <summary>
+        /// Runs the YOLO model on raw image data and returns the inference results.
+        /// </summary>
+        /// <param name="imageData">The raw image data as a byte array.</param>
+        /// <param name="width">The width of the image.</param>
+        /// <param name="height">The height of the image.</param>
+        /// <returns>A read-only collection of OrtValue representing the inference results.</returns>
+        public IDisposableReadOnlyCollection<OrtValue> Run(byte[] imageData, int width, int height)
+        {
+            var tensorArrayBuffer = customSizeFloatPool.Rent(minimumLength: _tensorBufferSize);
+            try
+            {
+                lock (_progressLock)
+                {
+                    var tensor = PreprocessRawImageToTensor(imageData, width, height, tensorArrayBuffer);
+                    using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, tensor.Buffer, OnnxModel.InputShape);
+                    var inputNames = new Dictionary<string, OrtValue>
+                    {
+                        { OnnxModel.InputName, inputOrtValue }
+                    };
+                    return _session.Run(_runOptions, inputNames, OnnxModel.OutputNames);
+                }
+            }
+            finally
+            {
+                customSizeFloatPool.Return(tensorArrayBuffer, true);
+            }
+        }
+
+        /// <summary>
+        /// Preprocesses raw image data into a tensor suitable for the ONNX model.
+        /// </summary>
+        /// <param name="imageData">The raw image data as a byte array.</param>
+        /// <param name="imageWidth">The width of the image.</param>
+        /// <param name="imageHeight">The height of the image.</param>
+        /// <param name="tensorArrayBuffer">The buffer to store the tensor data.</param>
+        /// <returns>A DenseTensor representing the preprocessed image data.</returns>
+        private DenseTensor<float> PreprocessRawImageToTensor(byte[] imageData, int imageWidth, int imageHeight, float[] tensorArrayBuffer)
+        {
+            var (modelWidth, modelHeight) = (OnnxModel.Input.Width, OnnxModel.Input.Height);
+            var (batchSize, colorChannels) = (OnnxModel.Input.BatchSize, OnnxModel.Input.Channels);
+
+            // Calculate scaling factor to maintain aspect ratio (letterboxing)
+            float scaleFactor = Math.Min((float)modelWidth / imageWidth, (float)modelHeight / imageHeight);
+            int newWidth = (int)(imageWidth * scaleFactor);
+            int newHeight = (int)(imageHeight * scaleFactor);
+
+            // Calculate padding
+            int xPad = (modelWidth - newWidth) / 2;
+            int yPad = (modelHeight - newHeight) / 2;
+
+            var pixelsPerChannel = _tensorBufferSize / colorChannels;
+
+            // Clear the buffer to ensure padding areas are black
+            Array.Clear(tensorArrayBuffer, 0, _tensorBufferSize);
+
+            for (int y = 0; y < newHeight; y++)
+            {
+                for (int x = 0; x < newWidth; x++)
+                {
+                    int sourceX = (int)(x / scaleFactor);
+                    int sourceY = (int)(y / scaleFactor);
+
+                    int sourceIndex = (sourceY * imageWidth + sourceX) * 4; // RGBA
+
+                    // Get RGB values
+                    var r = imageData[sourceIndex];
+                    var g = imageData[sourceIndex + 1];
+                    var b = imageData[sourceIndex + 2];
+
+                    int targetX = x + xPad;
+                    int targetY = y + yPad;
+                    int targetIndex = targetY * modelWidth + targetX;
+
+                    // Normalize and place in the correct channel plane
+                    tensorArrayBuffer[targetIndex] = r / 255.0f;
+                    tensorArrayBuffer[targetIndex + pixelsPerChannel] = g / 255.0f;
+                    tensorArrayBuffer[targetIndex + pixelsPerChannel * 2] = b / 255.0f;
+                }
+            }
+
+            // Fix: Convert OnnxModel.InputShape (long[]) to ReadOnlySpan<int> for DenseTensor constructor
+            var inputShapeSpan = OnnxModel.InputShape.Select(x => (int)x).ToArray().AsSpan();
+
+            return new DenseTensor<float>(tensorArrayBuffer.AsMemory()[.._tensorBufferSize], inputShapeSpan);
+        }
+
+        /// <summary>
         /// Runs inference on video data using the specified options and optional thresholds.
         /// Triggers events for progress, completion, and status changes during video processing.
         /// </summary>
