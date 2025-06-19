@@ -1,4 +1,6 @@
-﻿namespace YoloDotNet.Modules.V11
+﻿using Stride.Graphics;
+
+namespace YoloDotNet.Modules.V11
 {
     public class SegmentationModuleV11 : ISegmentationModule
     {
@@ -30,6 +32,9 @@
 
         public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
             => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, ProcessImage);
+
+        public Texture ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => _segmentationModuleV8.ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
 
         #region Helper methods  
 

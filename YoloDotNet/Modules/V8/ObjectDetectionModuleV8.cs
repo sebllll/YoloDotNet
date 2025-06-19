@@ -3,7 +3,6 @@
     public class ObjectDetectionModuleV8 : IObjectDetectionModule
     {
         private readonly YoloCore _yoloCore;
-        private static List<ObjectResult> _result = default!;
         private readonly int _labels;
         private readonly int _channels;
         private readonly int _channels2;
@@ -19,8 +18,6 @@
         public ObjectDetectionModuleV8(YoloCore yoloCore)
         {
             _yoloCore = yoloCore;
-
-            _result = new ();
 
             _labels = _yoloCore.OnnxModel.Labels.Length;
             _channels = _yoloCore.OnnxModel.Outputs[0].Channels;
@@ -61,7 +58,7 @@
 
             var (xPad, yPad, gain) = _yoloCore.CalculateGain(image);
   
-            var  boxes = _yoloCore.customSizeObjectResultPool.Rent(_channels);
+            var boxes = _yoloCore.customSizeObjectResultPool.Rent(_channels);
             
             try
             {
@@ -119,18 +116,12 @@
                     }
                 }
                 
-                foreach (var item in boxes)
-                {
-                    if (item != null)
-                        _result.Add(item);
-                }
-
-                return _yoloCore.RemoveOverlappingBoxes([.. _result], overlapThreshold);
+                var validBoxes = boxes.Take(_channels).Where(b => b is not null);
+                return _yoloCore.RemoveOverlappingBoxes([.. validBoxes], overlapThreshold);
             }
             finally
             {
                 _yoloCore.customSizeObjectResultPool.Return(boxes, clearArray: true);
-                _result.Clear();
             }
         }
 

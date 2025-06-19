@@ -1,4 +1,6 @@
-﻿namespace YoloDotNet
+﻿using Stride.Graphics;
+
+namespace YoloDotNet
 {
     public class Yolo : IDisposable
     {
@@ -90,6 +92,20 @@
         /// <returns>A list of Segmentation results.</returns>
         public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
             => ((ISegmentationModule)_detection).ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
+
+        /// <summary>
+        /// Run segmentation on an image and return a texture mask for persons.
+        /// </summary>
+        /// <param name="device">The graphics device to create the texture with.</param>
+        /// <param name="imageData">The image to segmentate.</param>
+        /// <param name="width">The image width</param>
+        /// <param name="height">The image height</param>
+        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
+        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
+        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
+        /// <returns>A Stride Texture with the person mask.</returns>
+        public Texture RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
+            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
         
         /// <summary>
         /// Run pose estimation on an image.

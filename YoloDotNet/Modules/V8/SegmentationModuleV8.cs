@@ -7,6 +7,9 @@ using YoloDotNet.Core;
 using YoloDotNet.Models;
 using YoloDotNet.Modules.Interfaces;
 using System.Runtime.InteropServices;
+using Stride.Graphics;
+using System.Linq;
+using Buffer = System.Buffer;
 
 namespace YoloDotNet.Modules.V8
 {
@@ -38,6 +41,12 @@ namespace YoloDotNet.Modules.V8
         {
             using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
             return RunSegmentation(width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public Texture ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou);
         }
 
         public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
@@ -139,6 +148,108 @@ namespace YoloDotNet.Modules.V8
             ortValues[1].Dispose();
 
             return [.. boundingBoxes.Select(x => (Segmentation)x)];
+        }
+
+        private Texture RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
+        {
+            var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
+            var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
+
+            using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
+            var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
+
+            var personBoxes = boundingBoxes.Where(box => box.Label.Index == 0);
+            if (!personBoxes.Any())
+            {
+                // Create a distinct "no-bounding-box" texture instead of matching another detector's output.
+                var distinctData = new byte[imageWidth * imageHeight];
+                for (int i = 0; i < distinctData.Length; i++)
+                {
+                    distinctData[i] = 0; // Fill it with a distinct mid-gray value
+                }
+                return Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm, distinctData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable, TextureOptions.None);
+            }
+
+            var finalMaskData = new byte[imageWidth * imageHeight];
+            var pixelThreshold = (float)pixelConfidence;
+
+            using var segmentedBitmap = new SKBitmap(_yoloCore.OnnxModel.Outputs[1].Width, _yoloCore.OnnxModel.Outputs[1].Height, SKColorType.Gray8, SKAlphaType.Opaque);
+
+            var elements = _yoloCore.OnnxModel.Labels.Length + 4;
+            var inputWidth = _yoloCore.OnnxModel.Input.Width;
+            var inputHeight = _yoloCore.OnnxModel.Input.Height;
+            var scalingFactorW = (float)_yoloCore.OnnxModel.Outputs[1].Width / inputWidth;
+            var scalingFactorH = (float)_yoloCore.OnnxModel.Outputs[1].Height / inputHeight;
+
+            foreach (var box in personBoxes)
+            {
+                var scaledBoundingBox = ScaleBoundingBox(box, scalingFactorW, scalingFactorH);
+                var maskWeights = CollectMaskWeightsFromBoundingBoxArea(box, _yoloCore.OnnxModel.Outputs[0].Channels, _yoloCore.OnnxModel.Outputs[1].Channels, elements, ortSpan0);
+
+                using (var canvas = new SKCanvas(segmentedBitmap))
+                {
+                    canvas.Clear(SKColors.White); // Clear for each box
+                }
+
+                ApplyMaskToSegmentedPixels(segmentedBitmap,
+                    _yoloCore.OnnxModel.Outputs[1].Width,
+                    _yoloCore.OnnxModel.Outputs[1].Height,
+                    _yoloCore.OnnxModel.Outputs[1].Channels,
+                    scaledBoundingBox,
+                    ortSpan1,
+                    maskWeights);
+
+                TransferResizedMask(segmentedBitmap, box, scaledBoundingBox, finalMaskData, imageWidth, pixelThreshold);
+            }
+
+            ortValues[0].Dispose();
+            ortValues[1].Dispose();
+
+            return Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable, TextureOptions.None);
+        }
+
+        private unsafe void TransferResizedMask(SKBitmap sourceMask, ObjectResult box, SKRectI sourceMaskBounds, byte[] destinationMask, int destinationWidth, float pixelThreshold)
+        {
+            var destBox = box.BoundingBox;
+            if (destBox.Width <= 0 || destBox.Height <= 0) return;
+
+            float scaleX = (float)sourceMaskBounds.Width / destBox.Width;
+            float scaleY = (float)sourceMaskBounds.Height / destBox.Height;
+
+            int sourceWidth = sourceMask.Width;
+            int destinationHeight = destinationMask.Length / destinationWidth;
+
+            IntPtr sourcePtr = sourceMask.GetPixels();
+            byte* sourcePixelData = (byte*)sourcePtr.ToPointer();
+
+            for (int y = 0; y < destBox.Height; y++)
+            {
+                int destPixelY = destBox.Top + y;
+                if (destPixelY < 0 || destPixelY >= destinationHeight) continue;
+
+                for (int x = 0; x < destBox.Width; x++)
+                {
+                    int destPixelX = destBox.Left + x;
+                    if (destPixelX < 0 || destPixelX >= destinationWidth) continue;
+
+                    int sourceX = sourceMaskBounds.Left + (int)(x * scaleX);
+                    int sourceY = sourceMaskBounds.Top + (int)(y * scaleY);
+
+                    byte pixelValue = sourcePixelData[sourceY * sourceWidth + sourceX];
+                    float confidenceValue = YoloCore.CalculatePixelConfidence(pixelValue);
+
+                    if (confidenceValue > pixelThreshold)
+                    {
+                        int destIndex = destPixelY * destinationWidth + destPixelX;
+                        byte newMaskValue = (byte)(confidenceValue * 255);
+
+                        if (newMaskValue > destinationMask[destIndex])
+                        {
+                            destinationMask[destIndex] = newMaskValue;
+                        }
+                    }
+                }
+            }
         }
 
         private static SKRectI ScaleBoundingBox(ObjectResult box, float scalingFactorW, float scalingFactorH)
