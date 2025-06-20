@@ -49,6 +49,13 @@ namespace YoloDotNet.Modules.V8
             return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou);
         }
 
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunPersonSegmentationToTextureAndBB(device, width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+
         public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
             => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, (image, conf, pixConf, iouVal) => ProcessImage(image, conf, pixConf, iouVal));
 
@@ -158,8 +165,10 @@ namespace YoloDotNet.Modules.V8
             using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
             var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
 
-            var personBoxes = boundingBoxes.Where(box => box.Label.Index == 0);
-            if (!personBoxes.Any())
+            //var personBoxes = boundingBoxes.Where(box => box.Label.Index == 0);
+
+
+            if (!boundingBoxes.Any())
             {
                 // Create a distinct "no-bounding-box" texture instead of matching another detector's output.
                 var distinctData = new byte[imageWidth * imageHeight];
@@ -181,7 +190,7 @@ namespace YoloDotNet.Modules.V8
             var scalingFactorW = (float)_yoloCore.OnnxModel.Outputs[1].Width / inputWidth;
             var scalingFactorH = (float)_yoloCore.OnnxModel.Outputs[1].Height / inputHeight;
 
-            foreach (var box in personBoxes)
+            foreach (var box in boundingBoxes)
             {
                 var scaledBoundingBox = ScaleBoundingBox(box, scalingFactorW, scalingFactorH);
                 var maskWeights = CollectMaskWeightsFromBoundingBoxArea(box, _yoloCore.OnnxModel.Outputs[0].Channels, _yoloCore.OnnxModel.Outputs[1].Channels, elements, ortSpan0);
@@ -202,10 +211,84 @@ namespace YoloDotNet.Modules.V8
                 TransferResizedMask(segmentedBitmap, box, scaledBoundingBox, finalMaskData, imageWidth, pixelThreshold);
             }
 
+            //ortValues[0].Dispose();
+            //ortValues[1].Dispose();
+
+            return Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable, TextureOptions.None);
+        }
+
+        private (List<SKRectI>, Texture) RunPersonSegmentationToTextureAndBB(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
+        {
+            var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
+            var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
+
+            using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
+            var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
+
+            // If no bounding boxes are found, return distinct texture + empty list
+            if (!boundingBoxes.Any())
+            {
+                var distinctData = new byte[imageWidth * imageHeight];
+                // Fill distinctData with a unique value if needed
+                var emptyTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm,
+                                                 distinctData, TextureFlags.ShaderResource,
+                                                 GraphicsResourceUsage.Immutable, TextureOptions.None);
+
+                //ortValues[0].Dispose();
+                //ortValues[1].Dispose();
+                return (new List<SKRectI>(), emptyTexture);
+            }
+
+            // Prepare final mask
+            var finalMaskData = new byte[imageWidth * imageHeight];
+            float pixelThreshold = (float)pixelConfidence;
+
+            using var segmentedBitmap = new SKBitmap(_yoloCore.OnnxModel.Outputs[1].Width,
+                                                     _yoloCore.OnnxModel.Outputs[1].Height,
+                                                     SKColorType.Gray8, SKAlphaType.Opaque);
+
+            int elements = _yoloCore.OnnxModel.Labels.Length + 4;
+            float scalingFactorW = (float)_yoloCore.OnnxModel.Outputs[1].Width / _yoloCore.OnnxModel.Input.Width;
+            float scalingFactorH = (float)_yoloCore.OnnxModel.Outputs[1].Height / _yoloCore.OnnxModel.Input.Height;
+
+            var skRectList = new List<SKRectI>();
+
+            foreach (var box in boundingBoxes)
+            {
+                var scaledBoundingBox = ScaleBoundingBox(box, scalingFactorW, scalingFactorH);
+                skRectList.Add(box.BoundingBox); // Collect bounding box from original space
+
+                var maskWeights = CollectMaskWeightsFromBoundingBoxArea(
+                    box,
+                    _yoloCore.OnnxModel.Outputs[0].Channels,
+                    _yoloCore.OnnxModel.Outputs[1].Channels,
+                    elements,
+                    ortSpan0);
+
+                using (var canvas = new SKCanvas(segmentedBitmap))
+                {
+                    canvas.Clear(SKColors.White);
+                }
+
+                ApplyMaskToSegmentedPixels(segmentedBitmap,
+                                           _yoloCore.OnnxModel.Outputs[1].Width,
+                                           _yoloCore.OnnxModel.Outputs[1].Height,
+                                           _yoloCore.OnnxModel.Outputs[1].Channels,
+                                           scaledBoundingBox,
+                                           ortSpan1,
+                                           maskWeights);
+
+                TransferResizedMask(segmentedBitmap, box, scaledBoundingBox, finalMaskData, imageWidth, pixelThreshold);
+            }
+
             ortValues[0].Dispose();
             ortValues[1].Dispose();
 
-            return Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable, TextureOptions.None);
+            var outTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm,
+                                           finalMaskData, TextureFlags.ShaderResource,
+                                           GraphicsResourceUsage.Immutable, TextureOptions.None);
+
+            return (skRectList, outTexture);
         }
 
         private unsafe void TransferResizedMask(SKBitmap sourceMask, ObjectResult box, SKRectI sourceMaskBounds, byte[] destinationMask, int destinationWidth, float pixelThreshold)
