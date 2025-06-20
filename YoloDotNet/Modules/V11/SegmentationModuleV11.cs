@@ -39,6 +39,9 @@ namespace YoloDotNet.Modules.V11
         public (List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
             => _segmentationModuleV8.ProcessPersonMaskAsTextureAndBB(device, imageData, width, height, confidence, pixelConfidence, iou);
 
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+    => _segmentationModuleV8.ProcessPersonMaskAsTextureAndBBFull(device, imageData, width, height, confidence, pixelConfidence, iou);
+
 
         #region Helper methods  
 

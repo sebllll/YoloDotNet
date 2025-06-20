@@ -122,6 +122,21 @@ namespace YoloDotNet
             => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBB(device, imageData, width, height, confidence, pixelConfidence, iou);
 
         /// <summary>
+        /// Run segmentation on an image and return a texture mask for persons plus a list of BoundingBoxes.
+        /// This version does not crop the texture to the bounding boxes, but returns the full texture.
+        /// </summary>
+        /// <param name="device">The graphics device to create the texture with.</param>
+        /// <param name="imageData">The image to segmentate.</param>
+        /// <param name="width">The image width</param>
+        /// <param name="height">The image height</param>
+        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
+        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
+        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
+        /// <returns>A Stride Texture with the person mask plus a list of BoundingBoxes.</returns>
+        public (List<SKRectI>, Texture) RunSegmentationAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBBFull(device, imageData, width, height, confidence, pixelConfidence, iou);
+
+        /// <summary>
         /// Run pose estimation on an image.
         /// </summary>
         /// <param name="img">The image to pose estimate.</param>
