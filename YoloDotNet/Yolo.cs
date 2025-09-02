@@ -3,6 +3,7 @@
 // https://github.com/NickSwardh/YoloDotNet
 
 using Stride.Graphics;
+using System.Reflection.Metadata.Ecma335;
 
 namespace YoloDotNet
 {
@@ -158,8 +159,8 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
         /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
         /// <returns>A Stride Texture with the person mask.</returns>
-        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
-            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
+        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool CropToBB = false)
+            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB);
 
         /// <summary>
         /// Run segmentation on an image and return a texture mask for persons plus a list of BoundingBoxes.

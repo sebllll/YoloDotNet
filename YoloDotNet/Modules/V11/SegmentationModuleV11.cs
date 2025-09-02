@@ -24,8 +24,8 @@ namespace YoloDotNet.Modules.V11
         public List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
             => _segmentationModuleV8.ProcessImage(image, confidence, pixelConfidence, iou);
 
-        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
-            => _segmentationModuleV8.ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB)
+            => _segmentationModuleV8.ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB);
 
     //    public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
     //        => _segmentationModuleV8.ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);

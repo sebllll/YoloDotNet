@@ -3,6 +3,7 @@
 // https://github.com/NickSwardh/YoloDotNet
 
 using Stride.Graphics;
+using System.ComponentModel.Design;
 
 namespace YoloDotNet.Modules.V8
 {
@@ -104,14 +105,14 @@ namespace YoloDotNet.Modules.V8
             return [.. boundingBoxes.Select(x => (Segmentation)x)];
         }
 
-        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB)
         {
             using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
-            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou);
+            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou, labelIndex, CropToBB);
         }
 
 
-        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
+        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
@@ -119,8 +120,10 @@ namespace YoloDotNet.Modules.V8
             using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
             var boundingBoxes = _objectDetectionModule.ObjectDetection(new SKSizeI(imageWidth, imageHeight), ortSpan0, confidence, iou);
 
+            var personBoxes = boundingBoxes.Where(box => box.Label.Index == labelIndex);
+
             // If no bounding boxes are found, return distinct texture + empty list
-            if (boundingBoxes.Length == 0)
+            if (!personBoxes.Any())
             {
                 var distinctData = new byte[imageWidth * imageHeight];
                 // Fill distinctData with a unique value if needed
@@ -143,7 +146,7 @@ namespace YoloDotNet.Modules.V8
 
             var skRectList = new List<SKRectI>();
 
-            foreach (var box in boundingBoxes)
+            foreach (var box in personBoxes)
             {
                 skRectList.Add(box.BoundingBox); // Collect bounding box from original space
 
@@ -159,12 +162,25 @@ namespace YoloDotNet.Modules.V8
                     canvas.Clear(SKColors.White);
                 }
 
-                ApplyMaskToSegmentedPixelsFull(segmentedBitmap,
-                                           _yoloCore.OnnxModel.Outputs[1].Width,
-                                           _yoloCore.OnnxModel.Outputs[1].Height,
-                                           _yoloCore.OnnxModel.Outputs[1].Channels,
-                                           ortSpan1,
-                                           maskWeights);
+                if (CropToBB)
+                {
+                    ApplyMaskToSegmentedPixels(segmentedBitmap,
+                                               _yoloCore.OnnxModel.Outputs[1].Width,
+                                               _yoloCore.OnnxModel.Outputs[1].Height,
+                                               _yoloCore.OnnxModel.Outputs[1].Channels,
+                                               box.BoundingBox,
+                                               ortSpan1,
+                                               maskWeights);
+                }
+                else
+                { 
+                    ApplyMaskToSegmentedPixelsFull(segmentedBitmap,
+                                               _yoloCore.OnnxModel.Outputs[1].Width,
+                                               _yoloCore.OnnxModel.Outputs[1].Height,
+                                               _yoloCore.OnnxModel.Outputs[1].Channels,
+                                               ortSpan1,
+                                               maskWeights);
+                }
 
                 TransferResizedMaskFull(segmentedBitmap, finalMaskData, imageWidth, imageHeight, pixelThreshold);
             }
@@ -290,6 +306,29 @@ namespace YoloDotNet.Modules.V8
                     for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
                         pixelWeight += ortSpan1[offset] * maskWeights[p];
 
+                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
+                    pixelData[y * output1Width + x] = pixelData[y * output1Width + x];
+                }
+            }
+        }
+
+        unsafe private void ApplyMaskToSegmentedPixels(SKBitmap segmentedBitmap, int output1Width, int output1Height, int output1Channels, SKRectI scaledBoundingBox, ReadOnlySpan<float> ortSpan1, float[] maskWeights)
+        {
+            IntPtr pixelsPtr = segmentedBitmap.GetPixels();
+
+            for (int y = 0; y < output1Height; y++)
+            {
+                for (int x = 0; x < output1Width; x++)
+                {
+                    if (x < scaledBoundingBox.Left || x > scaledBoundingBox.Right || y < scaledBoundingBox.Top || y > scaledBoundingBox.Bottom)
+                        continue;
+
+                    float pixelWeight = 0;
+                    var offset = x + y * output1Width;
+                    for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
+                        pixelWeight += ortSpan1[offset] * maskWeights[p];
+
+                    byte* pixelData = (byte*)pixelsPtr.ToPointer();
                     pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
                 }
             }
