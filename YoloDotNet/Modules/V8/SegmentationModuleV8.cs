@@ -1,6 +1,19 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
+
+using Microsoft.ML.OnnxRuntime;
+using SkiaSharp;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System;
+using YoloDotNet.Core;
+using YoloDotNet.Models;
+using YoloDotNet.Modules.Interfaces;
+using System.Runtime.InteropServices;
+using Stride.Graphics;
+using System.Linq;
+using Buffer = System.Buffer;
 
 namespace YoloDotNet.Modules.V8
 {
@@ -58,11 +71,97 @@ namespace YoloDotNet.Modules.V8
         }
 
         private List<Segmentation> RunSegmentation(SKSizeI imageSize, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
+            SubscribeToVideoEvents();
+        }
+
+        public List<Segmentation> ProcessImage(SKImage image, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(image);
+            return RunSegmentation(image.Width, image.Height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public List<Segmentation> ProcessImage(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunSegmentation(width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public Texture ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunPersonSegmentationToTextureAndBBFull(device, width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            return RunPersonSegmentationToTextureAndBBFull(device, width, height, ortValues, confidence, pixelConfidence, iou);
+        }
+
+        public Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou)
+            => _yoloCore.RunVideo(options, confidence, pixelConfidence, iou, (image, conf, pixConf, iouVal) => ProcessImage(image, conf, pixConf, iouVal));
+
+        #region Segmentation
+
+        /// <summary>
+        /// <para><strong>Current segmentation process overview:</strong></para>
+        /// <list type="number">
+        ///     <item>
+        ///         <description>Perform regular object detection to obtain the bounding boxes.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Rescale each bounding box to fit the object within the ONNX model dimensions for segmentation (default: 160x160 for YOLO).</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Calculate pixel mask weights for the rescaled bounding box.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Apply the mask weights to the pixels within the rescaled bounding box area.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Crop the bounding box with the applied mask weights.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Rescale the cropped bounding box back to its original size.</description>
+        ///     </item>
+        ///     <item>
+        ///         <description>Iterate through all pixels and collect those with confidence values greater than the threshold.</description>
+        ///     </item>
+        /// </list>
+        /// </summary>
+        /// <param name="image">The input image for segmentation.</param>
+        /// <param name="ortValues">A read-only collection of OrtValue objects used for segmentation.</param>
+        /// <param name="confidence">The confidence threshold for object detection.</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for excluding bounding boxes.</param>
+        /// <returns>A list of Segmentation objects corresponding to the input bounding boxes.</returns> 
+        private List<Segmentation> RunSegmentation(int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
 
             var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
+            using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
+            var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
+            var pixels = new ConcurrentBag<Pixel>();
+            var croppedImage = new SKBitmap();
+            var resizedBitmap = new SKBitmap();
+            using var segmentedBitmap = new SKBitmap(_yoloCore.OnnxModel.Outputs[1].Width, _yoloCore.OnnxModel.Outputs[1].Height, SKColorType.Gray8, SKAlphaType.Opaque);
+            using var paint = new SKPaint { FilterQuality = SKFilterQuality.Low, IsAntialias = false };
+
+            var elements = _yoloCore.OnnxModel.Labels.Length + 4; // 4 = the boundingbox dimension (x, y, width, height)
+
+            var inputWidth = _yoloCore.OnnxModel.Input.Width;
+            var inputHeight = _yoloCore.OnnxModel.Input.Height;
+            var scalingFactorW = (float)_yoloCore.OnnxModel.Outputs[1].Width / inputWidth;
+            var scalingFactorH = (float)_yoloCore.OnnxModel.Outputs[1].Height / inputHeight;
+
+            var pixelThreshold = (float)pixelConfidence; // ImageConfig.SEGMENTATION_PIXEL_THRESHOLD;
 
             foreach (var box in boundingBoxes)
             {
@@ -99,7 +198,11 @@ namespace YoloDotNet.Modules.V8
             ortValues[1]?.Dispose();
             ortValues?.Dispose();
 
-            return [.. boundingBoxes.Select(x => (Segmentation)x)];
+            var outTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm,
+                                           finalMaskData, TextureFlags.ShaderResource,
+                                           GraphicsResourceUsage.Immutable, TextureOptions.None);
+
+            return (skRectList, outTexture);
         }
 
         private MaskWeights32 GetMaskWeightsFromBoundingBoxArea(ObjectResult box, ReadOnlySpan<float> ortSpan0)
@@ -159,6 +262,45 @@ namespace YoloDotNet.Modules.V8
                     row[x] = (byte)(pixelWeight * 255); // write directly to Gray8 bitmap
                 }
             }
+                        byte* pixelData = (byte*)pixelsPtr.ToPointer();
+                        pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
+                }
+            }
+        }
+
+        unsafe private void ApplyMaskToSegmentedPixelsFull(SKBitmap segmentedBitmap, int output1Width, int output1Height, int output1Channels, ReadOnlySpan<float> ortSpan1, float[] maskWeights)
+        {
+            IntPtr pixelsPtr = segmentedBitmap.GetPixels();
+            byte* pixelData = (byte*)pixelsPtr.ToPointer();
+
+            for (int y = 0; y < output1Height; y++)
+            {
+                for (int x = 0; x < output1Width; x++)
+                {
+                    float pixelWeight = 0;
+                    var offset = x + y * output1Width;
+                    for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
+                        pixelWeight += ortSpan1[offset] * maskWeights[p];
+
+                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
+                }
+            }
+        }
+
+        unsafe private void CropSegmentedBoundingBox(SKBitmap croppedImaged, SKBitmap segmentedBitmap, SKRectI scaledBoundingBox, int output1Width)
+        {
+            IntPtr croppedPixelsPtr = croppedImaged.GetPixels();
+            IntPtr pixelsPtr = segmentedBitmap.GetPixels();
+
+            Parallel.For(0, scaledBoundingBox.Height, _yoloCore.parallelOptions, y =>
+            {
+                int srcIndex = (scaledBoundingBox.Top + y) * output1Width + scaledBoundingBox.Left;
+                int dstIndex = y * scaledBoundingBox.Width;
+
+                byte* srcPixelData = (byte*)pixelsPtr.ToPointer();
+                byte* dstPixelData = (byte*)croppedPixelsPtr.ToPointer();
+                Buffer.MemoryCopy(srcPixelData + srcIndex, dstPixelData + dstIndex, scaledBoundingBox.Width, scaledBoundingBox.Width);
+            });
         }
 
         unsafe private byte[] PackUpscaledMaskToBitArray(SKBitmap resizedBitmap, double confidenceThreshold)

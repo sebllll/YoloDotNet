@@ -29,6 +29,9 @@ Segmentation inference just got leaner and meaner — CPU inference is up to 11%
 OrtEnv fix in 3.1.1:
 Reusing or recreating YoloDotNet objects? No more "OrtEnv singleton instance already exists" drama.</PackageReleaseNotes>
     <Copyright>Copyright © 2023 Nick Swardh</Copyright>
+Pixel Confidence for Segmentation: 
+Need more control? An optional pixel confidence parameter has been added for segmentation. Now it's possible to fine-tune those segmentation masks like a pro ;)</PackageReleaseNotes>
+  <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
@@ -44,7 +47,9 @@ Reusing or recreating YoloDotNet objects? No more "OrtEnv singleton instance alr
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.22.1" />
-    <PackageReference Include="SkiaSharp" Version="3.119.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.8" />
+    <PackageReference Include="Stride.Graphics" Version="4.2.0.2121" />
+    <PackageReference Include="VL.CoreLib" Version="2025.7.0-0369-g117540fa59" />
   </ItemGroup>
 
 </Project>

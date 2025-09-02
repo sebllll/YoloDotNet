@@ -1,4 +1,4 @@
-﻿// SPDX-License-Identifier: GPL-3.0-or-later
+// SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
@@ -39,6 +39,25 @@ namespace YoloDotNet.Core
 
             ConfigureOrtEnv();
             InjectModelIntoExecutionProvider();
+            SessionOptions sessionOptions;
+            var executionProvider = "CPU";
+
+            if (useCuda)
+            {
+                sessionOptions = SessionOptions.MakeSessionOptionWithCudaProvider(gpuId);
+                executionProvider = $"CUDA (GPU: {gpuId})";
+            }
+            else
+            {
+                sessionOptions = new SessionOptions();
+            }
+
+            sessionOptions.ExecutionMode = ExecutionMode.ORT_SEQUENTIAL;
+            sessionOptions.EnableMemoryPattern = false;
+            sessionOptions.InterOpNumThreads = 0;
+            sessionOptions.GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL;
+
+            _session = new InferenceSession(onnxModel, sessionOptions);
 
             _runOptions = new RunOptions();
             _ortIoBinding = _session.CreateIoBinding();
