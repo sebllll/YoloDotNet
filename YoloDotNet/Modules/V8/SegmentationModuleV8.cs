@@ -173,7 +173,7 @@ namespace YoloDotNet.Modules.V8
             //var personBoxes = boundingBoxes.Where(box => box.Label.Index == 0);
 
 
-            if (!boundingBoxes.Any())
+            if (boundingBoxes.Length == 0)
             {
                 // Create a distinct "no-bounding-box" texture instead of matching another detector's output.
                 var distinctData = new byte[imageWidth * imageHeight];
@@ -231,7 +231,7 @@ namespace YoloDotNet.Modules.V8
             var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
 
             // If no bounding boxes are found, return distinct texture + empty list
-            if (!boundingBoxes.Any())
+            if (boundingBoxes.Length == 0)
             {
                 var distinctData = new byte[imageWidth * imageHeight];
                 // Fill distinctData with a unique value if needed
@@ -305,7 +305,7 @@ namespace YoloDotNet.Modules.V8
             var boundingBoxes = _objectDetectionModule.ObjectDetection(dummyImage, ortSpan0, confidence, iou);
 
             // If no bounding boxes are found, return distinct texture + empty list
-            if (!boundingBoxes.Any())
+            if (boundingBoxes.Length == 0)
             {
                 var distinctData = new byte[imageWidth * imageHeight];
                 // Fill distinctData with a unique value if needed
