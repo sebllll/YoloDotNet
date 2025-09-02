@@ -2,6 +2,8 @@
 // Copyright (c) 2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using Stride.Graphics;
+
 namespace YoloDotNet.Modules.V11E
 {
     internal class SegmentationModuleV11E : ISegmentationModule
@@ -22,6 +24,9 @@ namespace YoloDotNet.Modules.V11E
         public List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
             => _segmentationModuleV8.ProcessImage(image, confidence, pixelConfidence, iou);
 
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            //using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
+            => _segmentationModuleV8.ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
         #region Helper methods
 
         public void Dispose()

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using YoloDotNet.Models;
 using Stride.Graphics;
 using Stride.Core.Mathematics;
-
+/*
 namespace YoloDotNet.Utility
 {
     public class SegmentationProcessor
@@ -258,3 +258,4 @@ namespace YoloDotNet.Utility
         }
     }
 }
+*/

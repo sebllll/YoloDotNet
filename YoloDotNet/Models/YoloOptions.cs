@@ -39,6 +39,7 @@ namespace YoloDotNet.Models
         /// - **Best Use Case:** Ideal when reducing image size while maintaining a balance between speed and quality.
         /// - **Modifiability:** This property can be changed at runtime to adjust filtering behavior.
         /// </remarks>
-        public SKSamplingOptions SamplingOptions { get; set; } = ImageConfig.DefaultSamplingOptions;
+        //public SKSamplingOptions SamplingOptions { get; set; } = ImageConfig.DefaultSamplingOptions;
+        public SKFilterQuality FilterQuality { get; set; } = ImageConfig.DefaultFilterQuality;
     }
 }

@@ -2,6 +2,8 @@
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using Stride.Graphics;
+
 namespace YoloDotNet
 {
     /// <summary>
@@ -142,8 +144,8 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
         /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
         /// <returns>A list of Segmentation results.</returns>
-        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
-            => ((ISegmentationModule)_detection).ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
+        //public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
+        //    => ((ISegmentationModule)_detection).ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
 
         /// <summary>
         /// Run segmentation on an image and return a texture mask for persons.
@@ -156,7 +158,7 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
         /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
         /// <returns>A Stride Texture with the person mask.</returns>
-        public Texture RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
+        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
             => ((ISegmentationModule)_detection).ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou);
 
         /// <summary>
@@ -170,8 +172,8 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
         /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
         /// <returns>A Stride Texture with the person mask plus a list of BoundingBoxes.</returns>
-        public (List<SKRectI>, Texture) RunSegmentationAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
-            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBB(device, imageData, width, height, confidence, pixelConfidence, iou);
+        //public (List<SKRectI>, Texture) RunSegmentationAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        //    => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBB(device, imageData, width, height, confidence, pixelConfidence, iou);
 
         /// <summary>
         /// Run segmentation on an image and return a texture mask for persons plus a list of BoundingBoxes.
@@ -185,8 +187,8 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
         /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
         /// <returns>A Stride Texture with the person mask plus a list of BoundingBoxes.</returns>
-        public (List<SKRectI>, Texture) RunSegmentationAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
-            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBBFull(device, imageData, width, height, confidence, pixelConfidence, iou);
+        //public (List<SKRectI>, Texture) RunSegmentationAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        //    => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBBFull(device, imageData, width, height, confidence, pixelConfidence, iou);
 
         /// <summary>
         /// Run pose estimation on an image.

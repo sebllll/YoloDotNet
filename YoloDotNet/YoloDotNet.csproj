@@ -18,19 +18,7 @@
     <Company />
     <PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
-    <PackageReleaseNotes>Say hello to YoloDotNet 3.1.1, packed with blazing fast inference thanks to brand-new TensorRT support! Now you can harness NVIDIA’s TensorRT execution provider to supercharge your YOLO models with ultra-low latency and killer throughput — perfect for real-time and edge deployments.
-
-TensorRT Integration:
-Enjoy powerful CUDA-accelerated inference that pushes your models to new heights with minimal fuss.
-
-Segmentation Improvements:
-Segmentation inference just got leaner and meaner — CPU inference is up to 11% faster, GPU up to 28% quicker, with memory usage slashed by a massive 85%. Your vision pipelines are now faster, lighter, and more reliable.
-
-OrtEnv fix in 3.1.1:
-Reusing or recreating YoloDotNet objects? No more "OrtEnv singleton instance already exists" drama.</PackageReleaseNotes>
-    <Copyright>Copyright © 2023 Nick Swardh</Copyright>
-Pixel Confidence for Segmentation: 
-Need more control? An optional pixel confidence parameter has been added for segmentation. Now it's possible to fine-tune those segmentation masks like a pro ;)</PackageReleaseNotes>
+    
   <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 

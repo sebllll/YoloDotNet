@@ -2,6 +2,9 @@
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using System.Reflection.Emit;
+using static System.Net.Mime.MediaTypeNames;
+
 namespace YoloDotNet.Extensions
 {
     public static class ImageExtension
@@ -206,7 +209,13 @@ namespace YoloDotNet.Extensions
             float boxMaxHeight = 0 - margin / 2;
             foreach (var label in labels)
             {
-                var lineWidth = font.MeasureText(LabelText(label.Label, label.Confidence, drawConfidence));
+                //var lineWidth = font.MeasureText(LabelText(label.Label, label.Confidence, drawConfidence));
+                var labelText = LabelText(label.Label, label.Confidence, drawConfidence);
+                Span<ushort> glyphs = stackalloc ushort[font.CountGlyphs(labelText)];
+                font.GetGlyphs(labelText, glyphs);
+                var lineWidth = font.MeasureText(glyphs);
+
+
                 if (lineWidth > boxMaxWidth)
                     boxMaxWidth = lineWidth;
 
@@ -431,7 +440,10 @@ namespace YoloDotNet.Extensions
                     : detection.Label.Name;
 
                 var labelText = LabelText(text, detection.Confidence, options.DrawConfidenceScore);
-                var labelWidth = (int)font.MeasureText(labelText);
+                //var labelWidth = (int)font.MeasureText(labelText);
+                Span<ushort> glyphs = stackalloc ushort[font.CountGlyphs(labelText)];
+                font.GetGlyphs(labelText, glyphs);
+                var labelWidth = font.MeasureText(glyphs);
 
                 labelBgPaint.Color = boxColor;
                 boxPaint.Color = boxColor;
@@ -439,7 +451,7 @@ namespace YoloDotNet.Extensions
                 // Calculate label background rect size
                 var left = box.Left - labelOffset;
                 var top = box.Top - labelBoxHeight;
-                var right = box.Left + labelWidth + (margin * 2);
+                var right = box.Left + (int)labelWidth + (margin * 2);
                 var bottom = box.Top - labelOffset;
 
                 var labelBackground = new SKRectI(left, top, right, bottom);
@@ -595,7 +607,10 @@ namespace YoloDotNet.Extensions
 
                 var labelText = LabelText(detection.Label.Name, detection.Confidence, options.DrawConfidenceScore);
 
-                var labelWidth = (int)font.MeasureText(labelText);
+                //var labelWidth = (int)font.MeasureText(labelText);
+                Span<ushort> glyphs = stackalloc ushort[font.CountGlyphs(labelText)];
+                font.GetGlyphs(labelText, glyphs);
+                var labelWidth = font.MeasureText(glyphs);
 
                 // Draw rotated bounding box
                 if (options.DrawBoundingBoxes)
