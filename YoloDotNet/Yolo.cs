@@ -4,281 +4,167 @@
 
 using Stride.Graphics;
 using Stride.Core.Mathematics;
-using System.Reflection.Metadata.Ecma335;
 
 namespace YoloDotNet
 {
     /// <summary>
-    /// Initializes a new instance of YoloDotNet.
+    /// Initializes a new instance of the Yolo class, which provides access to YOLO model inference for various vision tasks.
     /// </summary>
-    /// <param name="options">Options for initializing the YoloDotNet model.</param>
+    /// <param name="options">Configuration options for the YOLO model and execution providers.</param>
     public class Yolo(YoloOptions options) : IDisposable
     {
-        #region Private fields
-
-        private readonly IModule _detection = ModuleFactory.CreateModule(options);
-        private FFmpegService _ffmpegService = default!;
-
-        #endregion
-
-        #region Public Fields
-
-        public OnnxModel OnnxModel => _detection.OnnxModel;
-        public Action<SKBitmap, long> OnVideoFrameReceived = default!;
-        public Action OnVideoEnd = default!;
-
-        #endregion
-
-        #region Classification
+        private readonly IModule _module = ModuleFactory.CreateModule(options);
+        private FFmpegService? _ffmpegService;
 
         /// <summary>
-        /// Run image classification on an Image.
+        /// Gets the metadata for the loaded ONNX model.
         /// </summary>
-        /// <param name="img">The SKBitmap to classify.</param>
-        /// <param name="classes">The number of classes to return (default is 1).</param>
+        public OnnxModel OnnxModel => _module.OnnxModel;
+
+        /// <summary>
+        /// An action that is invoked when a video frame has been processed.
+        /// The callback receives the processed SKBitmap and the frame's timestamp.
+        /// </summary>
+        public Action<SKBitmap, long>? OnVideoFrameReceived { get; set; }
+
+        /// <summary>
+        /// An action that is invoked when video processing has completed.
+        /// </summary>
+        public Action? OnVideoEnd { get; set; }
+
+        /// <summary>
+        /// Runs image classification on a given image.
+        /// </summary>
+        /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
+        /// <param name="image">The image to classify.</param>
+        /// <param name="classes">The number of top classes to return.</param>
         /// <returns>A list of classification results.</returns>
-        public List<Classification> RunClassification(SKBitmap img, int classes = 1)
-            => ((IClassificationModule)_detection).ProcessImage(img, classes, 0, 0);
+        public List<Classification> RunClassification<T>(T image, int classes = 1)
+            => ((IClassificationModule)_module).ProcessImage(image, classes, 0, 0);
 
         /// <summary>
-        /// Run image classification on an Image.
+        /// Runs object detection on a given image.
         /// </summary>
-        /// <param name="img">The SKImage to classify.</param>
-        /// <param name="classes">The number of classes to return (default is 1).</param>
-        /// <returns>A list of classification results.</returns>
-        public List<Classification> RunClassification(SKImage img, int classes = 1)
-            => ((IClassificationModule)_detection).ProcessImage(img, classes, 0, 0);
-
-        #endregion
-
-        #region Object Detection
+        /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
+        /// <param name="image">The image to perform detection on.</param>
+        /// <param name="confidence">The confidence threshold for filtering detected objects.</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for non-maximum suppression.</param>
+        /// <returns>A list of detected objects.</returns>
+        public List<ObjectDetection> RunObjectDetection<T>(T image, double confidence = 0.2, double iou = 0.7)
+             => ((IObjectDetectionModule)_module).ProcessImage(image, confidence, 0, iou);
 
         /// <summary>
-        /// Run object detection on an Image.
+        /// Runs oriented bounding box (OBB) detection on a given image.
         /// </summary>
-        /// <param name="img">The SKBitmap to obb detect.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of classification results.</returns>
-        public List<ObjectDetection> RunObjectDetection(SKBitmap img, double confidence = 0.2, double iou = 0.7)
-            => ((IObjectDetectionModule)_detection).ProcessImage(img, confidence, 0, iou);
+        /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
+        /// <param name="image">The image to perform OBB detection on.</param>
+        /// <param name="confidence">The confidence threshold for filtering detected objects.</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for non-maximum suppression.</param>
+        /// <returns>A list of detected objects with oriented bounding boxes.</returns>
+        public List<OBBDetection> RunObbDetection<T>(T image, double confidence = 0.2, double iou = 0.7)
+            => ((IOBBDetectionModule)_module).ProcessImage(image, confidence, 0, iou);
 
         /// <summary>
-        /// Run object detection on an Image.
+        /// Runs instance segmentation on a given image.
         /// </summary>
-        /// <param name="img">The SKImage to obb detect.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of classification results.</returns>
-        public List<ObjectDetection> RunObjectDetection(SKImage img, double confidence = 0.2, double iou = 0.7)
-             => ((IObjectDetectionModule)_detection).ProcessImage(img, confidence, 0, iou);
-
-        #endregion
-
-        #region OBB (Oriented Bounding Box)
+        /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
+        /// <param name="image">The image to segment.</param>
+        /// <param name="confidence">The confidence threshold for filtering detected objects.</param>
+        /// <param name="pixelConfidence">The confidence threshold for the pixels in the segmentation mask.</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for non-maximum suppression.</param>
+        /// <returns>A list of segmentation results, including masks and bounding boxes.</returns>
+        public List<Segmentation> RunSegmentation<T>(T image, double confidence = 0.2, double pixelConfidence = 0.65, double iou = 0.7)
+            => ((ISegmentationModule)_module).ProcessImage(image, confidence, pixelConfidence, iou);
 
         /// <summary>
-        /// Run oriented bounding bBox detection on an image.
+        /// Runs pose estimation on a given image.
         /// </summary>
-        /// <param name="img">The SKBitmap to obb detect.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<OBBDetection> RunObbDetection(SKBitmap img, double confidence = 0.2, double iou = 0.7)
-            => ((IOBBDetectionModule)_detection).ProcessImage(img, confidence, 0, iou);
+        /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
+        /// <param name="image">The image to perform pose estimation on.</param>
+        /// <param name="confidence">The confidence threshold for filtering detected objects.</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for non-maximum suppression.</param>
+        /// <returns>A list of pose estimation results, including keypoints.</returns>
+        public List<PoseEstimation> RunPoseEstimation<T>(T image, double confidence = 0.2, double iou = 0.7)
+            => ((IPoseEstimationModule)_module).ProcessImage(image, confidence, 0, iou);
 
         /// <summary>
-        /// Run oriented bounding bBox detection on an image.
-        /// </summary>
-        /// <param name="img">The SKImage to obb detect.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<OBBDetection> RunObbDetection(SKImage img, double confidence = 0.2, double iou = 0.7)
-            => ((IOBBDetectionModule)_detection).ProcessImage(img, confidence, 0, iou);
-
-        #endregion
-
-        #region Segmentation
-
-        /// <summary>
-        /// Run segmentation on an image.
-        /// </summary>
-        /// <param name="img">The SKBitmap to segmentate.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<Segmentation> RunSegmentation(SKBitmap img, double confidence = 0.2, double pixelConfedence = 0.65, double iou = 0.7)
-            => ((ISegmentationModule)_detection).ProcessImage(img, confidence, pixelConfedence, iou);
-
-        /// <summary>
-        /// Run segmentation on an image.
-        /// </summary>
-        /// <param name="img">The SKImage to segmentate.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<Segmentation> RunSegmentation(SKImage img, double confidence = 0.2, double pixelConfedence = 0.65, double iou = 0.7)
-            => ((ISegmentationModule)_detection).ProcessImage(img, confidence, pixelConfedence, iou);
-
-        #endregion
-
-        #region Pose Estimation
-
-        /// <summary>
-        /// Run pose estimation on an image.
-        /// </summary>
-        /// <param name="img">The SKBitmap to pose estimate.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<PoseEstimation> RunPoseEstimation(SKBitmap img, double confidence = 0.2, double iou = 0.7)
-            => ((IPoseEstimationModule)_detection).ProcessImage(img, confidence, 0, iou);
-
-
-        /// <summary>
-        /// Run segmentation on an image.
-        /// </summary>
-        /// <param name="imageData">The image to segmentate.</param>
-        /// <param name="width">The image width</param>
-        /// <param name="height">The image height</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
-        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        //public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7)
-        //    => ((ISegmentationModule)_detection).ProcessImage(imageData, width, height, confidence, pixelConfidence, iou);
-
-        /// <summary>
-        /// Run segmentation on an image and return a texture mask for persons.
+        /// Runs segmentation on image data and returns a texture mask.
         /// </summary>
         /// <param name="device">The graphics device to create the texture with.</param>
-        /// <param name="imageData">The image to segmentate.</param>
-        /// <param name="width">The image width</param>
-        /// <param name="height">The image height</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
-        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A Stride Texture with the person mask.</returns>
+        /// <param name="imageData">The raw image data bytes.</param>
+        /// <param name="width">The width of the image.</param>
+        /// <param name="height">The height of the image.</param>
+        /// <param name="confidence">The confidence threshold for detected objects.</param>
+        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks.</param>
+        /// <param name="iou">The IoU threshold for removing overlapping bounding boxes.</param>
+        /// <param name="labelIndex">The specific class label index to generate a mask for.</param>
+        /// <param name="CropToBB">Whether to crop the mask to the bounding box of the detected object.</param>
+        /// <param name="tint">The color to tint the segmentation mask.</param>
+        /// <param name="scaleBB">A scaling factor for the bounding box when cropping.</param>
+        /// <returns>A tuple containing a list of bounding boxes and a Stride Texture with the generated mask.</returns>
         public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool CropToBB = false, Color4 tint = default, double scaleBB = 1.0f)
-            => ((ISegmentationModule)_detection).ProcessPersonMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB);
+            => ((ISegmentationModule)_module).ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB);
 
         /// <summary>
-        /// Run segmentation on an image and return a texture mask for persons plus a list of BoundingBoxes.
+        /// Initializes the video stream using the specified options.
         /// </summary>
-        /// <param name="device">The graphics device to create the texture with.</param>
-        /// <param name="imageData">The image to segmentate.</param>
-        /// <param name="width">The image width</param>
-        /// <param name="height">The image height</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
-        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A Stride Texture with the person mask plus a list of BoundingBoxes.</returns>
-        //public (List<SKRectI>, Texture) RunSegmentationAndBB(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
-        //    => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBB(device, imageData, width, height, confidence, pixelConfidence, iou);
-
-        /// <summary>
-        /// Run segmentation on an image and return a texture mask for persons plus a list of BoundingBoxes.
-        /// This version does not crop the texture to the bounding boxes, but returns the full texture.
-        /// </summary>
-        /// <param name="device">The graphics device to create the texture with.</param>
-        /// <param name="imageData">The image to segmentate.</param>
-        /// <param name="width">The image width</param>
-        /// <param name="height">The image height</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.23).</param>
-        /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks (default is 0.65).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A Stride Texture with the person mask plus a list of BoundingBoxes.</returns>
-        //public (List<SKRectI>, Texture) RunSegmentationAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
-        //    => ((ISegmentationModule)_detection).ProcessPersonMaskAsTextureAndBBFull(device, imageData, width, height, confidence, pixelConfidence, iou);
-
-        /// <summary>
-        /// Run pose estimation on an image.
-        /// </summary>
-        /// <param name="img">The SKImage to pose estimate.</param>
-        /// <param name="confidence">The confidence threshold for detected objects (default is 0.2).</param>
-        /// <param name="iou">IoU (Intersection Over Union) overlap threshold value for removing overlapping bounding boxes (default: 0.7).</param>
-        /// <returns>A list of Segmentation results.</returns>
-        public List<PoseEstimation> RunPoseEstimation(SKImage img, double confidence = 0.2, double iou = 0.7)
-            => ((IPoseEstimationModule)_detection).ProcessImage(img, confidence, 0, iou);
-
-        #endregion
-
-        #region Video
-
-        /// <summary>
-        /// Initializes the video stream using the specified <see cref="VideoOptions"/> and sets up event handlers for frame processing and video completion.
-        /// </summary>
-        /// <param name="videoOptions"></param>
+        /// <param name="videoOptions">The configuration for video processing.</param>
+        /// <exception cref="YoloDotNetVideoException">Thrown if the CPU execution provider is used for video, as GPU is required.</exception>
         public void InitializeVideo(VideoOptions videoOptions)
         {
             if (options.ExecutionProvider is CpuExecutionProvider)
                 throw new YoloDotNetVideoException(
-                    "Video inference requires CUDA acceleration (GPU support) and FFmpeg installed on your system. " +
-                    "Please enable CUDA by setting 'YoloOptions.Cuda = true' in your configuration, " +
-                    "and ensure FFmpeg is installed and accessible in your system PATH.");
+                    "Video inference requires GPU acceleration (CUDA or TensorRT) and FFmpeg. " +
+                    "Please select a GPU-based execution provider and ensure FFmpeg is installed and accessible in your system's PATH.");
 
             _ffmpegService = new(videoOptions, options)
             {
-                OnFrameReady = (frame, frameIndex) => OnVideoFrameReceived.Invoke(frame, frameIndex),
+                OnFrameReady = (frame, frameIndex) => OnVideoFrameReceived?.Invoke(frame, frameIndex),
                 OnVideoEnd = () => OnVideoEnd?.Invoke()
             };
         }
 
         /// <summary>
-        /// Retrieves a list of available video input devices detected on the current system.
+        /// Retrieves a list of available video input devices on the system.
         /// </summary>
-        /// <exception cref="YoloDotNetVideoException"></exception>
-        public static List<string> GetVideoDevices()
-            => FFmpegService.GetVideoDevicesOnSystem() ?? throw new YoloDotNetVideoException(
-                "No video initialized. Please call InitializeVideo() before attempting to retrieve metadata.");
+        /// <returns>A list of video device names.</returns>
+        public static List<string> GetVideoDevices() => FFmpegService.GetVideoDevicesOnSystem();
 
         /// <summary>
-        /// Retrieves metadata about the stream or initialized video, such as duration, frame rate, and resolution.
+        /// Retrieves metadata for the initialized video stream.
         /// </summary>
-        /// <exception cref="YoloDotNetVideoException"></exception>
+        /// <returns>The video metadata.</returns>
+        /// <exception cref="YoloDotNetVideoException">Thrown if video has not been initialized.</exception>
         public VideoMetadata GetVideoMetaData()
-            => _ffmpegService.VideoMetadata ?? throw new YoloDotNetVideoException(
-                "No video initialized. Please call InitializeVideo() before attempting to retrieve metadata.");
+            => _ffmpegService?.VideoMetadata ?? throw new YoloDotNetVideoException(
+                "Video not initialized. Call InitializeVideo() before retrieving metadata.");
 
         /// <summary>
-        /// Starts decoding and processing video frames from the initialized video stream.
+        /// Starts decoding and processing frames from the initialized video stream.
         /// </summary>
-        public void StartVideoProcessing()
-            => _ffmpegService.Start();
+        public void StartVideoProcessing() => _ffmpegService?.Start();
 
         /// <summary>
-        /// Stops video frame processing and releases resources associated with the video stream.
+        /// Stops video frame processing and releases associated resources.
         /// </summary>
-        public void StopVideoProcessing()
-            => _ffmpegService.Stop();
-
-        #endregion
-
-        #region Model Info
+        public void StopVideoProcessing() => _ffmpegService?.Stop();
 
         /// <summary>
-        /// Gets a description of the currently loaded YOLO model,
-        /// including the model type and version. Returns "No model loaded"
-        /// if no model has been initialized.
+        /// Gets a description of the currently loaded YOLO model.
         /// </summary>
         public string ModelInfo =>
-            _detection.OnnxModel == null
+            _module.OnnxModel == null
                 ? "No model loaded"
-                : $"{_detection.OnnxModel.ModelType} (yolo {_detection.OnnxModel.ModelVersion.ToString().ToLower()})";
+                : $"{_module.OnnxModel.ModelType} (yolo {_module.OnnxModel.ModelVersion.ToString().ToLower()})";
 
-        #endregion
-
-        #region Dispose
-
+        /// <summary>
+        /// Releases all resources used by the Yolo instance.
+        /// </summary>
         public void Dispose()
         {
-            _detection.Dispose();
+            _module.Dispose();
             _ffmpegService?.Dispose();
-
             GC.SuppressFinalize(this);
         }
-
-        #endregion
     }
 }
