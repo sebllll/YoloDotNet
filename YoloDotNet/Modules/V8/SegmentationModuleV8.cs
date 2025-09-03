@@ -106,14 +106,14 @@ namespace YoloDotNet.Modules.V8
             return [.. boundingBoxes.Select(x => (Segmentation)x)];
         }
 
-        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint)
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint, double scaleBB)
         {
             using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
-            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint);
+            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB);
         }
 
 
-        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint)
+        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint, double scaleBB)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
@@ -168,7 +168,23 @@ namespace YoloDotNet.Modules.V8
 
                 if (CropToBB)
                 {
-                    var scaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(box.BoundingBoxUnscaled);
+                    var unscaledBox = box.BoundingBoxUnscaled;
+
+                    if (scaleBB != 1.0f)
+                    {
+                        float centerX = unscaledBox.MidX;
+                        float centerY = unscaledBox.MidY;
+                        float newWidth = unscaledBox.Width * (float)scaleBB;
+                        float newHeight = unscaledBox.Height * (float)scaleBB;
+
+                        unscaledBox = new SKRect(
+                            centerX - newWidth / 2,
+                            centerY - newHeight / 2,
+                            centerX + newWidth / 2,
+                            centerY + newHeight / 2);
+                    }
+
+                    var scaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(unscaledBox);
                     ApplyMaskToSegmentedPixelsRGB(segmentedBitmap,
                                                _yoloCore.OnnxModel.Outputs[1].Width,
                                                _yoloCore.OnnxModel.Outputs[1].Height,
