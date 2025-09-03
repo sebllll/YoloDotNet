@@ -168,13 +168,15 @@ namespace YoloDotNet.Modules.V8
 
                 if (CropToBB)
                 {
-                    ApplyMaskToSegmentedPixels(segmentedBitmap,
+                    var scaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(box.BoundingBoxUnscaled);
+                    ApplyMaskToSegmentedPixelsRGB(segmentedBitmap,
                                                _yoloCore.OnnxModel.Outputs[1].Width,
                                                _yoloCore.OnnxModel.Outputs[1].Height,
                                                _yoloCore.OnnxModel.Outputs[1].Channels,
-                                               box.BoundingBox,
+                                               scaledBoundingBox,
                                                ortSpan1,
-                                               maskWeights);
+                                               maskWeights,
+                                               tint);
                 }
                 else
                 { 
@@ -353,6 +355,37 @@ namespace YoloDotNet.Modules.V8
 
                     byte* pixelData = (byte*)pixelsPtr.ToPointer();
                     pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(1 -YoloCore.Sigmoid(pixelWeight));
+                }
+            }
+        }
+
+        unsafe private void ApplyMaskToSegmentedPixelsRGB(SKBitmap segmentedBitmap, int output1Width, int output1Height, int output1Channels, SKRectI scaledBoundingBox, ReadOnlySpan<float> ortSpan1, float[] maskWeights, Color4 color)
+        {
+            IntPtr pixelsPtr = segmentedBitmap.GetPixels();
+            uint* pixelData = (uint*)pixelsPtr.ToPointer();
+
+            byte rByte = (byte)(color.R * 255);
+            byte gByte = (byte)(color.G * 255);
+            byte bByte = (byte)(color.B * 255);
+            byte aByte = (byte)(color.A * 255);
+
+            for (int y = scaledBoundingBox.Top; y <= scaledBoundingBox.Bottom; y++)
+            {
+                for (int x = scaledBoundingBox.Left; x <= scaledBoundingBox.Right; x++)
+                {
+                    float pixelWeight = 0;
+                    var offset = x + y * output1Width;
+                    for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
+                        pixelWeight += ortSpan1[offset] * maskWeights[p];
+
+                    float sigmoid = YoloCore.Sigmoid(pixelWeight);
+                    byte alpha = (byte)(sigmoid * aByte);
+
+                    uint r = (uint)(rByte * alpha / 255);
+                    uint g = (uint)(gByte * alpha / 255);
+                    uint b = (uint)(bByte * alpha / 255);
+
+                    pixelData[y * output1Width + x] = ((uint)alpha << 24) | (b << 16) | (g << 8) | r;
                 }
             }
         }
