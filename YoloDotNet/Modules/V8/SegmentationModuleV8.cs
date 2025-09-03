@@ -4,6 +4,8 @@
 
 using Stride.Graphics;
 using Stride.Core.Mathematics;
+using System.IO;
+using System.Runtime.InteropServices;
 
 namespace YoloDotNet.Modules.V8
 {
@@ -123,7 +125,7 @@ namespace YoloDotNet.Modules.V8
                 boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
             }
 
-            var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.A8_UNorm;
+            var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             var bytesPerPixel = doRGB ? 4 : 1;
 
             if (boundingBoxes.Length == 0)
