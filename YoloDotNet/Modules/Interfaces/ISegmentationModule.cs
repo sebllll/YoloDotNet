@@ -2,7 +2,7 @@
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
-using SkiaSharp;
+using Stride.Core.Mathematics;
 using Stride.Graphics;
 using System.Collections.Generic;
 using System.Reflection.Metadata.Ecma335;
@@ -16,7 +16,7 @@ namespace YoloDotNet.Modules.Interfaces
         // List<Segmentation> ProcessImage(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou);
 
         //Texture ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou);
-        (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB);
+        (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint);
         //(List<SKRectI>, Texture) ProcessPersonMaskAsTextureAndBBFull(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou);
         //Dictionary<int, List<Segmentation>> ProcessVideo(VideoOptions options, double confidence, double pixelConfidence, double iou);
 

@@ -4,6 +4,7 @@
 
 using Stride.Graphics;
 using System.ComponentModel.Design;
+using Stride.Core.Mathematics;
 
 namespace YoloDotNet.Modules.V8
 {
@@ -105,14 +106,14 @@ namespace YoloDotNet.Modules.V8
             return [.. boundingBoxes.Select(x => (Segmentation)x)];
         }
 
-        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB)
+        public (List<SKRectI>, Texture) ProcessPersonMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint)
         {
             using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
-            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou, labelIndex, CropToBB);
+            return RunPersonSegmentationToTexture(device, width, height, ortValues, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint);
         }
 
 
-        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB)
+        private (List<SKRectI>, Texture) RunPersonSegmentationToTexture(GraphicsDevice device, int imageWidth, int imageHeight, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
@@ -128,9 +129,9 @@ namespace YoloDotNet.Modules.V8
             // If no bounding boxes are found, return distinct texture + empty list
             if (boundingBoxes.Length == 0)
             {
-                var distinctData = new byte[imageWidth * imageHeight];
+                var distinctData = new byte[imageWidth * imageHeight * 4];
                 // Fill distinctData with a unique value if needed
-                var emptyTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm,
+                var emptyTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8G8B8A8_UNorm,
                                                  distinctData, TextureFlags.ShaderResource,
                                                  GraphicsResourceUsage.Immutable, TextureOptions.None);
 
@@ -138,12 +139,12 @@ namespace YoloDotNet.Modules.V8
             }
 
             // Prepare final mask
-            var finalMaskData = new byte[imageWidth * imageHeight];
+            var finalMaskData = new byte[imageWidth * imageHeight * 4];
             float pixelThreshold = (float)pixelConfidence;
 
             using var segmentedBitmap = new SKBitmap(_yoloCore.OnnxModel.Outputs[1].Width,
                                                      _yoloCore.OnnxModel.Outputs[1].Height,
-                                                     SKColorType.Gray8, SKAlphaType.Opaque);
+                                                     SKColorType.Rgba8888, SKAlphaType.Premul);
 
             int elements = _yoloCore.OnnxModel.Labels.Length + 4;
 
@@ -162,7 +163,7 @@ namespace YoloDotNet.Modules.V8
 
                 using (var canvas = new SKCanvas(segmentedBitmap))
                 {
-                    canvas.Clear(SKColors.White);
+                    canvas.Clear(SKColors.Transparent);
                 }
 
                 if (CropToBB)
@@ -177,12 +178,13 @@ namespace YoloDotNet.Modules.V8
                 }
                 else
                 { 
-                    ApplyMaskToSegmentedPixelsFull(segmentedBitmap,
+                    ApplyMaskToSegmentedPixelsFullRGB(segmentedBitmap,
                                                _yoloCore.OnnxModel.Outputs[1].Width,
                                                _yoloCore.OnnxModel.Outputs[1].Height,
                                                _yoloCore.OnnxModel.Outputs[1].Channels,
                                                ortSpan1,
-                                               maskWeights);
+                                               maskWeights,
+                                               tint);
                 }
 
                 TransferResizedMaskFull(segmentedBitmap, finalMaskData, imageWidth, imageHeight, pixelThreshold);
@@ -191,7 +193,7 @@ namespace YoloDotNet.Modules.V8
             ortValues[0].Dispose();
             ortValues[1].Dispose();
 
-            var outTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8_UNorm,
+            var outTexture = Texture.New2D(device, imageWidth, imageHeight, PixelFormat.R8G8B8A8_UNorm,
                                            finalMaskData, TextureFlags.ShaderResource,
                                            GraphicsResourceUsage.Immutable, TextureOptions.None);
 
@@ -209,6 +211,7 @@ namespace YoloDotNet.Modules.V8
             float scaleY = (float)sourceMask.Height / destinationHeight;
 
             int sourceWidth = sourceMask.Width;
+            int bytesPerPixel = sourceMask.BytesPerPixel;
 
             IntPtr sourcePtr = sourceMask.GetPixels();
             byte* sourcePixelData = (byte*)sourcePtr.ToPointer();
@@ -220,17 +223,34 @@ namespace YoloDotNet.Modules.V8
                     int sourceX = (int)(x * scaleX);
                     int sourceY = (int)(y * scaleY);
 
-                    byte pixelValue = sourcePixelData[sourceY * sourceWidth + sourceX];
-                    float confidenceValue = YoloCore.CalculatePixelConfidence(pixelValue);
+                    int sourceIndex = (sourceY * sourceWidth + sourceX) * bytesPerPixel;
+                    
+                    // For RGBA, alpha is at offset 3. For grayscale, it's the pixel value itself.
+                    byte alphaValue = (bytesPerPixel == 4) ? sourcePixelData[sourceIndex + 3] : sourcePixelData[sourceIndex];
+                    float confidenceValue = (float)alphaValue / 255.0f;
 
                     if (confidenceValue > pixelThreshold)
                     {
-                        int destIndex = y * destinationWidth + x;
-                        byte newMaskValue = (byte)(confidenceValue * 255);
+                        int destIndex = (y * destinationWidth + x) * 4;
 
-                        if (newMaskValue > destinationMask[destIndex])
+                        if (alphaValue > destinationMask[destIndex + 3]) // Compare alpha channel
                         {
-                            destinationMask[destIndex] = newMaskValue;
+                            if (bytesPerPixel == 4)
+                            {
+                                // SkiaSharp with SKColorType.Rgba8888 stores in memory as R,G,B,A
+                                // Stride TextureData expects R,G,B,A. No swizzle needed.
+                                destinationMask[destIndex + 0] = sourcePixelData[sourceIndex + 0]; // R
+                                destinationMask[destIndex + 1] = sourcePixelData[sourceIndex + 1]; // G
+                                destinationMask[destIndex + 2] = sourcePixelData[sourceIndex + 2]; // B
+                                destinationMask[destIndex + 3] = sourcePixelData[sourceIndex + 3]; // A
+                            }
+                            else // Grayscale
+                            {
+                                destinationMask[destIndex + 0] = alphaValue;
+                                destinationMask[destIndex + 1] = alphaValue;
+                                destinationMask[destIndex + 2] = alphaValue;
+                                destinationMask[destIndex + 3] = alphaValue;
+                            }
                         }
                     }
                 }
@@ -337,8 +357,39 @@ namespace YoloDotNet.Modules.V8
             }
         }
 
+        unsafe private void ApplyMaskToSegmentedPixelsFullRGB(SKBitmap segmentedBitmap, int output1Width, int output1Height, int output1Channels, ReadOnlySpan<float> ortSpan1, float[] maskWeights, Color4 color)
+        {
+            IntPtr pixelsPtr = segmentedBitmap.GetPixels();
+            uint* pixelData = (uint*)pixelsPtr.ToPointer();
+            
+            // Convert float color components (0-1) to byte (0-255)
+            byte rByte = (byte)(color.R * 255);
+            byte gByte = (byte)(color.G * 255);
+            byte bByte = (byte)(color.B * 255);
+            byte aByte = (byte)(color.A * 255);
 
+            for (int y = 0; y < output1Height; y++)
+            {
+                for (int x = 0; x < output1Width; x++)
+                {
+                    float pixelWeight = 0;
+                    var offset = x + y * output1Width;
+                    for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
+                        pixelWeight += ortSpan1[offset] * maskWeights[p];
 
+                    float sigmoid = YoloCore.Sigmoid(pixelWeight);
+                    byte alpha = (byte)(sigmoid * aByte);
+
+                    // Premultiply alpha. SKBitmap with SKAlphaType.Premul expects this.
+                    // Skia stores Rgba8888 colors in memory as R,G,B,A, so we pack it that way.
+                    uint r = (uint)(rByte * alpha / 255);
+                    uint g = (uint)(gByte * alpha / 255);
+                    uint b = (uint)(bByte * alpha / 255);
+
+                    pixelData[y * output1Width + x] = ((uint)alpha << 24) | (b << 16) | (g << 8) | r;
+                }
+            }
+        }
 
 
 
