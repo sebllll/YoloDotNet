@@ -98,12 +98,13 @@ namespace YoloDotNet
         /// <param name="pixelConfidence">The pixel confidence threshold for segmentation masks.</param>
         /// <param name="iou">The IoU threshold for removing overlapping bounding boxes.</param>
         /// <param name="labelIndex">The specific class label index to generate a mask for.</param>
-        /// <param name="CropToBB">Whether to crop the mask to the bounding box of the detected object.</param>
+        /// <param name="cropToBB">Whether to crop the mask to the bounding box of the detected object.</param>
         /// <param name="tint">The color to tint the segmentation mask.</param>
         /// <param name="scaleBB">A scaling factor for the bounding box when cropping.</param>
+        /// <param name="doRGB">Determines whether to generate an RGBA texture or a faster single-channel grayscale texture.</param>
         /// <returns>A tuple containing a list of bounding boxes and a Stride Texture with the generated mask.</returns>
-        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool CropToBB = false, Color4 tint = default, double scaleBB = 1.0f)
-            => ((ISegmentationModule)_module).ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB);
+        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool cropToBB = false, Color4 tint = default, double scaleBB = 1.0f, bool doRGB = true)
+            => ((ISegmentationModule)_module).ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, tint, scaleBB, doRGB);
 
         /// <summary>
         /// Initializes the video stream using the specified options.

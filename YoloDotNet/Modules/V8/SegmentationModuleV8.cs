@@ -39,20 +39,16 @@ namespace YoloDotNet.Modules.V8
             _yoloCore = yoloCore;
             _objectDetectionModule = new ObjectDetectionModuleV8(_yoloCore);
 
-            // Get model input width and height
             var inputWidth = _yoloCore.OnnxModel.Input.Width;
             var inputHeight = _yoloCore.OnnxModel.Input.Height;
 
-            // Get model pixel mask widh and height
             _maskWidth = _yoloCore.OnnxModel.Outputs[1].Width;
             _maskHeight = _yoloCore.OnnxModel.Outputs[1].Height;
 
-            _elements = _yoloCore.OnnxModel.Labels.Length + 4; // 4 = the boundingbox dimension (x, y, width, height)
             _elements = _yoloCore.OnnxModel.Labels.Length + 4;
             _channelsFromOutput0 = _yoloCore.OnnxModel.Outputs[0].Channels;
             _channelsFromOutput1 = _yoloCore.OnnxModel.Outputs[1].Channels;
 
-            // Calculate scaling factor for downscaling boundingboxes to segmentation pixelmask proportions
             _scalingFactorW = (float)_maskWidth / inputWidth;
             _scalingFactorH = (float)_maskHeight / inputHeight;
         }
@@ -109,8 +105,13 @@ namespace YoloDotNet.Modules.V8
         /// <summary>
         /// Processes an image to generate a texture containing segmentation masks.
         /// </summary>
-        public (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, Color4 tint, double scaleBB)
+        public (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, Color4 tint, double scaleBB, bool doRGB)
         {
+            if (tint == default)
+            {
+                tint = new Color4(1.0f, 1.0f, 1.0f, 1.0f);
+            }
+
             using var ortValues = _yoloCore.Run(imageData, width, height);
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
             var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
@@ -122,16 +123,21 @@ namespace YoloDotNet.Modules.V8
                 boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
             }
 
+            var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.A8_UNorm;
+            var bytesPerPixel = doRGB ? 4 : 1;
+
             if (boundingBoxes.Length == 0)
             {
-                var emptyData = new byte[width * height * 4];
-                var emptyTexture = Texture.New2D(device, width, height, PixelFormat.R8G8B8A8_UNorm, emptyData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
+                var emptyData = new byte[width * height * bytesPerPixel];
+                var emptyTexture = Texture.New2D(device, width, height, pixelFormat, emptyData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
                 return ([], emptyTexture);
             }
 
-            var finalMaskData = new byte[width * height * 4];
-            using var segmentedBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Rgba8888, SKAlphaType.Premul);
+            var finalMaskData = new byte[width * height * bytesPerPixel];
+            var colorType = doRGB ? SKColorType.Rgba8888 : SKColorType.Gray8;
+            var alphaType = doRGB ? SKAlphaType.Premul : SKAlphaType.Opaque;
 
+            using var segmentedBitmap = new SKBitmap(_maskWidth, _maskHeight, colorType, alphaType);
             var skRectList = new List<SKRectI>();
 
             foreach (var box in boundingBoxes)
@@ -157,14 +163,14 @@ namespace YoloDotNet.Modules.V8
                     cropRect = DownscaleBoundingBoxToSegmentationOutput(unscaledBox);
                 }
 
-                ApplyMaskToSegmentedPixels(segmentedBitmap, ortSpan1, maskWeights, tint, cropRect);
+                ApplyMaskToSegmentedPixels(segmentedBitmap, ortSpan1, maskWeights, tint, doRGB, cropRect);
                 TransferResizedMask(segmentedBitmap, finalMaskData, width, height, (float)pixelConfidence);
             }
 
             ortValues[0]?.Dispose();
             ortValues[1]?.Dispose();
 
-            var outTexture = Texture.New2D(device, width, height, PixelFormat.R8G8B8A8_UNorm, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
+            var outTexture = Texture.New2D(device, width, height, pixelFormat, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
             return (skRectList, outTexture);
         }
 
@@ -179,7 +185,8 @@ namespace YoloDotNet.Modules.V8
             float scaleY = (float)sourceMask.Height / destinationHeight;
 
             int sourceWidth = sourceMask.Width;
-            int bytesPerPixel = sourceMask.BytesPerPixel;
+            int sourceBytesPerPixel = sourceMask.BytesPerPixel;
+            int destBytesPerPixel = destinationMask.Length / (destinationWidth * destinationHeight);
             byte* sourcePixelData = (byte*)sourceMask.GetPixels().ToPointer();
 
             for (int y = 0; y < destinationHeight; y++)
@@ -188,27 +195,27 @@ namespace YoloDotNet.Modules.V8
                 {
                     int sourceX = (int)(x * scaleX);
                     int sourceY = (int)(y * scaleY);
-                    int sourceIndex = (sourceY * sourceWidth + sourceX) * bytesPerPixel;
+                    int sourceIndex = (sourceY * sourceWidth + sourceX) * sourceBytesPerPixel;
 
-                    byte alphaValue = (bytesPerPixel == 4) ? sourcePixelData[sourceIndex + 3] : sourcePixelData[sourceIndex];
+                    byte alphaValue = (sourceBytesPerPixel == 4) ? sourcePixelData[sourceIndex + 3] : sourcePixelData[sourceIndex];
                     if ((float)alphaValue / 255.0f > pixelThreshold)
                     {
-                        int destIndex = (y * destinationWidth + x) * 4;
-                        if (alphaValue > destinationMask[destIndex + 3])
+                        int destIndex = (y * destinationWidth + x) * destBytesPerPixel;
+                        if (destBytesPerPixel == 4) // RGBA
                         {
-                            if (bytesPerPixel == 4)
+                            if (alphaValue > destinationMask[destIndex + 3])
                             {
                                 destinationMask[destIndex + 0] = sourcePixelData[sourceIndex + 0]; // R
                                 destinationMask[destIndex + 1] = sourcePixelData[sourceIndex + 1]; // G
                                 destinationMask[destIndex + 2] = sourcePixelData[sourceIndex + 2]; // B
                                 destinationMask[destIndex + 3] = alphaValue;                       // A
                             }
-                            else
+                        }
+                        else // Grayscale
+                        {
+                            if (alphaValue > destinationMask[destIndex])
                             {
-                                destinationMask[destIndex + 0] = alphaValue;
-                                destinationMask[destIndex + 1] = alphaValue;
-                                destinationMask[destIndex + 2] = alphaValue;
-                                destinationMask[destIndex + 3] = alphaValue;
+                                destinationMask[destIndex] = alphaValue;
                             }
                         }
                     }
@@ -233,37 +240,57 @@ namespace YoloDotNet.Modules.V8
         /// <summary>
         /// Applies a colored and weighted mask to a bitmap, optionally cropped to a bounding box.
         /// </summary>
-        private unsafe void ApplyMaskToSegmentedPixels(SKBitmap segmentedBitmap, ReadOnlySpan<float> ortSpan, float[] maskWeights, Color4 color, SKRectI? cropRect = null)
+        private unsafe void ApplyMaskToSegmentedPixels(SKBitmap segmentedBitmap, ReadOnlySpan<float> ortSpan, float[] maskWeights, Color4 color, bool doRGB, SKRectI? cropRect = null)
         {
-            uint* pixelData = (uint*)segmentedBitmap.GetPixels().ToPointer();
             int width = segmentedBitmap.Width;
             int height = segmentedBitmap.Height;
-
-            byte rByte = (byte)(color.R * 255);
-            byte gByte = (byte)(color.G * 255);
-            byte bByte = (byte)(color.B * 255);
-            byte aByte = (byte)(color.A * 255);
-
             int startY = cropRect?.Top ?? 0;
             int endY = cropRect?.Bottom ?? height - 1;
             int startX = cropRect?.Left ?? 0;
             int endX = cropRect?.Right ?? width - 1;
 
-            for (int y = startY; y <= endY; y++)
+            if (doRGB)
             {
-                for (int x = startX; x <= endX; x++)
+                uint* pixelData = (uint*)segmentedBitmap.GetPixels().ToPointer();
+                byte rByte = (byte)(color.R * 255);
+                byte gByte = (byte)(color.G * 255);
+                byte bByte = (byte)(color.B * 255);
+                byte aByte = (byte)(color.A * 255);
+
+                for (int y = startY; y <= endY; y++)
                 {
-                    float pixelWeight = 0;
-                    var offset = x + y * width;
-                    for (var p = 0; p < _channelsFromOutput1; p++, offset += width * height)
-                        pixelWeight += ortSpan[offset] * maskWeights[p];
+                    for (int x = startX; x <= endX; x++)
+                    {
+                        float pixelWeight = 0;
+                        var offset = x + y * width;
+                        for (var p = 0; p < _channelsFromOutput1; p++, offset += width * height)
+                            pixelWeight += ortSpan[offset] * maskWeights[p];
 
-                    byte alpha = (byte)(YoloCore.Sigmoid(pixelWeight) * aByte);
-                    uint r = (uint)(rByte * alpha / 255);
-                    uint g = (uint)(gByte * alpha / 255);
-                    uint b = (uint)(bByte * alpha / 255);
+                        byte alpha = (byte)(YoloCore.Sigmoid(pixelWeight) * aByte);
+                        uint r = (uint)(rByte * alpha / 255);
+                        uint g = (uint)(gByte * alpha / 255);
+                        uint b = (uint)(bByte * alpha / 255);
 
-                    pixelData[y * width + x] = ((uint)alpha << 24) | (b << 16) | (g << 8) | r;
+                        pixelData[y * width + x] = ((uint)alpha << 24) | (b << 16) | (g << 8) | r;
+                    }
+                }
+            }
+            else
+            {
+                byte* pixelData = (byte*)segmentedBitmap.GetPixels().ToPointer();
+                byte aByte = (byte)(color.A * 255);
+
+                for (int y = startY; y <= endY; y++)
+                {
+                    for (int x = startX; x <= endX; x++)
+                    {
+                        float pixelWeight = 0;
+                        var offset = x + y * width;
+                        for (var p = 0; p < _channelsFromOutput1; p++, offset += width * height)
+                            pixelWeight += ortSpan[offset] * maskWeights[p];
+
+                        pixelData[y * width + x] = (byte)(YoloCore.Sigmoid(pixelWeight) * aByte);
+                    }
                 }
             }
         }

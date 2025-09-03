@@ -9,10 +9,6 @@ namespace YoloDotNet.Modules.V12
 {
     internal class SegmentationModuleV12 : ISegmentationModule
     {
-        public event EventHandler VideoStatusEvent = delegate { };
-        public event EventHandler VideoProgressEvent = delegate { };
-        public event EventHandler VideoCompleteEvent = delegate { };
-
         private readonly YoloCore _yoloCore;
         private readonly SegmentationModuleV8 _segmentationModuleV8 = default!;
 
@@ -29,9 +25,9 @@ namespace YoloDotNet.Modules.V12
         public List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
             => _segmentationModuleV8.ProcessImage(image, confidence, pixelConfidence, iou);
 
-        public (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint, double scaleBB)
-            //using IDisposableReadOnlyCollection<OrtValue>? ortValues = _yoloCore.Run(imageData, width, height);
-            => _segmentationModuleV8.ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB);
+        public (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool CropToBB, Color4 tint, double scaleBB, bool doRGB)
+            => _segmentationModuleV8.ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, CropToBB, tint, scaleBB, doRGB);
+
         #region Helper methods
 
         public void Dispose()

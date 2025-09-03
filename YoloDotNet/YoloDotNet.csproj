@@ -40,4 +40,8 @@
     <PackageReference Include="VL.CoreLib" Version="2025.7.0-0369-g117540fa59" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Modules\V12\" />
+  </ItemGroup>
+
 </Project>
