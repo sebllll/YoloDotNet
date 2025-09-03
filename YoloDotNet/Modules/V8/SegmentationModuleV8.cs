@@ -120,10 +120,13 @@ namespace YoloDotNet.Modules.V8
             using var dummyImage = SKImage.Create(new SKImageInfo(imageWidth, imageHeight));
             var boundingBoxes = _objectDetectionModule.ObjectDetection(new SKSizeI(imageWidth, imageHeight), ortSpan0, confidence, iou);
 
-            var personBoxes = boundingBoxes.Where(box => box.Label.Index == labelIndex);
+            if (labelIndex != -1)
+            {
+                boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
+            }
 
             // If no bounding boxes are found, return distinct texture + empty list
-            if (!personBoxes.Any())
+            if (boundingBoxes.Length == 0)
             {
                 var distinctData = new byte[imageWidth * imageHeight];
                 // Fill distinctData with a unique value if needed
@@ -146,7 +149,7 @@ namespace YoloDotNet.Modules.V8
 
             var skRectList = new List<SKRectI>();
 
-            foreach (var box in personBoxes)
+            foreach (var box in boundingBoxes)
             {
                 skRectList.Add(box.BoundingBox); // Collect bounding box from original space
 
@@ -306,7 +309,7 @@ namespace YoloDotNet.Modules.V8
                     for (var p = 0; p < output1Channels; p++, offset += output1Width * output1Height)
                         pixelWeight += ortSpan1[offset] * maskWeights[p];
 
-                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
+                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(1 -YoloCore.Sigmoid(pixelWeight));
                     pixelData[y * output1Width + x] = pixelData[y * output1Width + x];
                 }
             }
@@ -329,7 +332,7 @@ namespace YoloDotNet.Modules.V8
                         pixelWeight += ortSpan1[offset] * maskWeights[p];
 
                     byte* pixelData = (byte*)pixelsPtr.ToPointer();
-                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(YoloCore.Sigmoid(pixelWeight));
+                    pixelData[y * output1Width + x] = YoloCore.CalculatePixelLuminance(1 -YoloCore.Sigmoid(pixelWeight));
                 }
             }
         }
