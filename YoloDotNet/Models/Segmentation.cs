@@ -18,32 +18,30 @@ namespace YoloDotNet.Models
         /// </summary>
         public double Confidence { get; init; }
 
-        // Backing fields for bounding boxes
-        private SKRectI _boundingBox;
+        // Store the original box once; render-time BoundingBox is computed = base + offset
         private SKRectI _baseBoundingBox;
 
         /// <summary>
         /// Rectangle defining the region of interest (bounding box) of the detected object.
+        /// Computed from the base box plus current Offset to avoid mutating state on every Offset change.
         /// </summary>
         public SKRectI BoundingBox
         {
-            get => _boundingBox;
-            init
-            {
-                _boundingBox = value;
-                _baseBoundingBox = value;
-            }
+            get => new SKRectI(
+                _baseBoundingBox.Left + _offset.X,
+                _baseBoundingBox.Top + _offset.Y,
+                _baseBoundingBox.Right + _offset.X,
+                _baseBoundingBox.Bottom + _offset.Y);
+            init => _baseBoundingBox = value;
         }
 
         /// <summary>
         /// Bit-packed mask where each bit represents a pixel with confidence above a threshold (1 = present, 0 = absent).
-        /// Can be unpacked to an <see cref="SKBitmap"/> using the <c>UnpackToBitmap</c> extension method.
         /// </summary>
         public byte[] BitPackedPixelMask { get; set; } = [];
 
         /// <summary>
-        /// Color per Segmentation when rendering masks.
-        /// Can be set from outside.
+        /// Color per Segmentation when rendering masks. Can be set from outside.
         /// </summary>
         public Color4 Color { get; set; } = Color4.White;
 
@@ -51,21 +49,12 @@ namespace YoloDotNet.Models
 
         /// <summary>
         /// Offset used when rendering segmentations on larger canvases.
-        /// Setting this will also offset the BoundingBox accordingly.
+        /// Changing this value does not mutate the base bounding box; BoundingBox is computed from base + offset.
         /// </summary>
         public Int2 Offset
         {
             get => _offset;
-            set
-            {
-                _offset = value;
-                _boundingBox = new SKRectI(
-                    _baseBoundingBox.Left + value.X,
-                    _baseBoundingBox.Top + value.Y,
-                    _baseBoundingBox.Right + value.X,
-                    _baseBoundingBox.Bottom + value.Y
-                );
-            }
+            set => _offset = value;
         }
     }
 }

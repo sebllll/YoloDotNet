@@ -43,18 +43,17 @@ namespace YoloDotNet.Utility
                 if (bbox.Width <= 0 || bbox.Height <= 0)
                     continue;
 
-                // Choose color: per-segmentation or global tint
                 var chosen = useSegmentationColor ? seg.Color : tint;
                 if (chosen == default)
                     chosen = new Color4(1f, 1f, 1f, 1f);
 
-                // Premultiplied bytes
+                // Premultiplied color for RGBA path
                 byte aByte = (byte)(Math.Clamp(chosen.A, 0f, 1f) * 255);
                 byte rPremul = (byte)(Math.Clamp(chosen.R, 0f, 1f) * aByte);
                 byte gPremul = (byte)(Math.Clamp(chosen.G, 0f, 1f) * aByte);
                 byte bPremul = (byte)(Math.Clamp(chosen.B, 0f, 1f) * aByte);
 
-                // Clip the draw rect against the output canvas only
+                // Clip against output canvas (supports offsets larger than source width/height)
                 int drawLeft = Math.Max(0, bbox.Left);
                 int drawTop = Math.Max(0, bbox.Top);
                 int drawRight = Math.Min(outW, bbox.Right);
@@ -88,6 +87,7 @@ namespace YoloDotNet.Utility
 
                         if (doRGB)
                         {
+                            // Max-over alpha composition
                             if (aByte > finalMaskData[destIndex + 3])
                             {
                                 finalMaskData[destIndex + 0] = rPremul; // R
@@ -98,6 +98,7 @@ namespace YoloDotNet.Utility
                         }
                         else
                         {
+                            // Grayscale max
                             if (aByte > finalMaskData[destIndex])
                                 finalMaskData[destIndex] = aByte;
                         }
