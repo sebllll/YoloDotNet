@@ -11,8 +11,9 @@ namespace YoloDotNet.Modules.Interfaces
 {
     public interface ISegmentationModule : IModule
     {
-        (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, Color4 tint, double scaleBB, bool doRGB);
+        (ObjectResult[], Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, Color4 tint, double scaleBB, bool doRGB, Func<ObjectResult, bool>? bboxFilter);
 
         List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou);
+        List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter);
     }
 }

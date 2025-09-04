@@ -2,8 +2,10 @@
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
-using Stride.Graphics;
+using SharpFont.Cache;
 using Stride.Core.Mathematics;
+using Stride.Graphics;
+using System.Reflection.Metadata.Ecma335;
 
 namespace YoloDotNet
 {
@@ -77,6 +79,17 @@ namespace YoloDotNet
             => ((ISegmentationModule)_module).ProcessImage(image, confidence, pixelConfidence, iou);
 
         /// <summary>
+        /// Runs instance segmentation on a given imageData byte[].
+        /// </summary>
+        /// <param name="imageData"></param>
+        /// <param name="confidence"></param>
+        /// <param name="pixelConfidence"></param>
+        /// <param name="iou"></param>
+        /// <returns></returns>
+        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.2, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = -1, bool cropToBB = true, double scaleBB = 1.0, Func<ObjectResult, bool>? bboxFilter = null)
+            => ((ISegmentationModule)_module).ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter);
+
+        /// <summary>
         /// Runs pose estimation on a given image.
         /// </summary>
         /// <typeparam name="T">The type of the image (e.g., SKBitmap, SKImage).</typeparam>
@@ -103,8 +116,8 @@ namespace YoloDotNet
         /// <param name="scaleBB">A scaling factor for the bounding box when cropping.</param>
         /// <param name="doRGB">Determines whether to generate an RGBA texture or a faster single-channel grayscale texture.</param>
         /// <returns>A tuple containing a list of bounding boxes and a Stride Texture with the generated mask.</returns>
-        public (List<SKRectI>, Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool cropToBB = false, Color4 tint = default, double scaleBB = 1.0f, bool doRGB = true)
-            => ((ISegmentationModule)_module).ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, tint, scaleBB, doRGB);
+        public (ObjectResult[], Texture) RunSegmentationAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence = 0.23, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = 0, bool cropToBB = false, Color4 tint = default, double scaleBB = 1.0f, bool doRGB = true, Func<ObjectResult, bool>? bboxFilter = null)
+            => ((ISegmentationModule)_module).ProcessMaskAsTexture(device, imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, tint, scaleBB, doRGB, bboxFilter);
 
         /// <summary>
         /// Initializes the video stream using the specified options.

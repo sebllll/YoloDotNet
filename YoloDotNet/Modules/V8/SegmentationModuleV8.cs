@@ -104,10 +104,104 @@ namespace YoloDotNet.Modules.V8
             return [.. boundingBoxes.Select(x => (Segmentation)x)];
         }
 
+        public List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter)
+        {
+            using var ortValues = _yoloCore.Run(imageData, width, height);
+            var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
+            var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
+
+            var imageSize = new SKSizeI(width, height);
+            var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
+
+            if (labelIndex != -1)
+            {
+                boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
+            }
+
+            if (bboxFilter is not null)
+            {
+                boundingBoxes = [.. boundingBoxes.Where(bboxFilter)];
+            }
+
+            foreach (var box in boundingBoxes)
+            {
+                // Compute the final unscaled bbox used for mask evaluation (optional scaling), then clamp to image bounds
+                var unscaled = box.BoundingBoxUnscaled;
+                if (cropToBB && scaleBB != 1.0)
+                {
+                    float cx = unscaled.MidX;
+                    float cy = unscaled.MidY;
+                    float nw = unscaled.Width * (float)scaleBB;
+                    float nh = unscaled.Height * (float)scaleBB;
+                    unscaled = new SKRect(cx - nw / 2, cy - nh / 2, cx + nw / 2, cy + nh / 2);
+                }
+
+                // Clamp to image extents (integer rect)
+                int left = Math.Clamp((int)Math.Floor(unscaled.Left), 0, width - 1);
+                int top = Math.Clamp((int)Math.Floor(unscaled.Top), 0, height - 1);
+                int right = Math.Clamp((int)Math.Ceiling(unscaled.Right), 0, width - 1);
+                int bottom = Math.Clamp((int)Math.Ceiling(unscaled.Bottom), 0, height - 1);
+
+                // Guard against degenerate rects
+                if (right < left) right = left;
+                if (bottom < top) bottom = top;
+
+                var finalBox = new SKRectI(left, top, right, bottom);
+
+                // This rect is used to crop from the segmentation output
+                var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(new SKRect(left, top, right, bottom));
+
+                // 1) Get weights from output0
+                var maskWeights = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
+
+                // 2) Apply pixel mask to canvas limited to the (possibly scaled) bbox
+                using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
+                ApplySegmentationPixelMask(pixelMaskBitmap, new SKRect(left, top, right, bottom), ortSpan1, maskWeights);
+
+                // 3) Crop the (downscaled) bbox region from the canvas
+                using var cropped = new SKBitmap();
+                pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
+
+                // 4) Upscale cropped pixel mask to the final bbox size (ensures packed mask aligns with finalBox)
+                var pixelMaskInfo = new SKImageInfo(finalBox.Width, finalBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
+                using var resizedCrop = new SKBitmap(pixelMaskInfo);
+#if NET8_0_OR_GREATER
+                if (Avx2.IsSupported)
+                    Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
+                else
+#endif
+                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationResamplingFilterQuality);
+
+                // 5) Pack to compact bit array (threshold = pixelConfidence)
+                box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
+
+                // Ensure the returned Segmentation reflects the transformed bbox
+                box.BoundingBox = finalBox;
+            }
+
+            ortValues[0]?.Dispose();
+            ortValues[1]?.Dispose();
+
+            return [.. boundingBoxes.Select(x => (Segmentation)x)];
+        }
+
         /// <summary>
         /// Processes an image to generate a texture containing segmentation masks.
         /// </summary>
-        public (List<SKRectI>, Texture) ProcessMaskAsTexture(GraphicsDevice device, byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, Color4 tint, double scaleBB, bool doRGB)
+        public (ObjectResult[], Texture) ProcessMaskAsTexture(
+            GraphicsDevice device,
+            byte[] imageData,
+            int width,
+            int height,
+            double confidence,
+            double pixelConfidence,
+            double iou, 
+           int labelIndex,
+           bool cropToBB,
+           Color4 tint,
+           double scaleBB,
+           bool doRGB,
+           Func<ObjectResult, bool>? bboxFilter)
         {
             if (tint == default)
             {
@@ -125,6 +219,11 @@ namespace YoloDotNet.Modules.V8
                 boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
             }
 
+            if (bboxFilter is not null)
+            {
+                boundingBoxes = [.. boundingBoxes.Where(bboxFilter)];
+            }
+
             var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             var bytesPerPixel = doRGB ? 4 : 1;
 
@@ -140,11 +239,12 @@ namespace YoloDotNet.Modules.V8
             var alphaType = doRGB ? SKAlphaType.Premul : SKAlphaType.Opaque;
 
             using var segmentedBitmap = new SKBitmap(_maskWidth, _maskHeight, colorType, alphaType);
-            var skRectList = new List<SKRectI>();
+            //var skRectList = new List<SKRectI>();
+
 
             foreach (var box in boundingBoxes)
             {
-                skRectList.Add(box.BoundingBox);
+                //skRectList.Add(box.BoundingBox);
 
                 var maskWeights = CollectMaskWeightsFromBoundingBoxArea(box, ortSpan0);
 
@@ -167,13 +267,34 @@ namespace YoloDotNet.Modules.V8
 
                 ApplyMaskToSegmentedPixels(segmentedBitmap, ortSpan1, maskWeights, tint, doRGB, cropRect);
                 TransferResizedMask(segmentedBitmap, finalMaskData, width, height, (float)pixelConfidence);
+
+                // Generate and assign per-box bit-packed mask at original bounding box size
+                var pixelMaskInfo = new SKImageInfo(box.BoundingBox.Width, box.BoundingBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
+                var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(box.BoundingBoxUnscaled);
+
+                using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
+                var maskWeights32 = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
+                ApplySegmentationPixelMask(pixelMaskBitmap, box.BoundingBoxUnscaled, ortSpan1, maskWeights32);
+
+                using var cropped = new SKBitmap();
+                pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
+
+                using var resizedCrop = new SKBitmap(pixelMaskInfo);
+#if NET8_0_OR_GREATER
+                if (Avx2.IsSupported)
+                    Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
+                else
+#endif
+                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationResamplingFilterQuality);
+
+                box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
             }
 
             ortValues[0]?.Dispose();
             ortValues[1]?.Dispose();
 
             var outTexture = Texture.New2D(device, width, height, pixelFormat, finalMaskData, TextureFlags.ShaderResource, GraphicsResourceUsage.Immutable);
-            return (skRectList, outTexture);
+            return (boundingBoxes, outTexture);
         }
 
         /// <summary>
@@ -377,5 +498,70 @@ namespace YoloDotNet.Modules.V8
             _yoloCore?.Dispose();
             GC.SuppressFinalize(this);
         }
+
+        //public Texture TextureFromSegmentations(
+        //    GraphicsDevice device,
+        //    int width,
+        //    int height,
+        //    IEnumerable<Segmentation> segmentations)
+        //{
+        //    if (segmentations is null)
+        //        segmentations = Enumerable.Empty<Segmentation>();
+
+        //    var pixelFormat = PixelFormat.R8_UNorm;
+        //    var finalMaskData = new byte[width * height];
+
+        //    foreach (var seg in segmentations)
+        //    {
+        //        // Must have a mask and a valid bbox
+        //        if (seg?.BitPackedPixelMask is null || seg.BitPackedPixelMask.Length == 0)
+        //            continue;
+
+        //        var bbox = seg.BoundingBox; // Assumed SKRectI
+        //        int left = Math.Clamp(bbox.Left, 0, width - 1);
+        //        int top = Math.Clamp(bbox.Top, 0, height - 1);
+        //        int boxWidth = Math.Max(0, Math.Min(bbox.Width, width - left));
+        //        int boxHeight = Math.Max(0, Math.Min(bbox.Height, height - top));
+
+        //        if (boxWidth == 0 || boxHeight == 0)
+        //            continue;
+
+        //        var mask = seg.BitPackedPixelMask;
+
+        //        // Iterate local pixels in bbox, unpack bits, write to final buffer
+        //        for (int y = 0; y < boxHeight; y++)
+        //        {
+        //            for (int x = 0; x < boxWidth; x++)
+        //            {
+        //                int i = y * bbox.Width + x; // indexing uses original bbox.Width for bit layout
+        //                int byteIndex = i >> 3;
+        //                int bitIndex = i & 7;
+
+        //                if (byteIndex >= mask.Length)
+        //                    break;
+
+        //                if ((mask[byteIndex] & (1 << bitIndex)) == 0)
+        //                    continue;
+
+        //                int targetX = left + x;
+        //                int targetY = top + y;
+        //                int destIndex = targetY * width + targetX;
+
+        //                // Max-over composition (grayscale)
+        //                if (finalMaskData[destIndex] < 255)
+        //                    finalMaskData[destIndex] = 255;
+        //            }
+        //        }
+        //    }
+
+        //    return Texture.New2D(
+        //        device,
+        //        width,
+        //        height,
+        //        pixelFormat,
+        //        finalMaskData,
+        //        TextureFlags.ShaderResource,
+        //        GraphicsResourceUsage.Immutable);
+        //}
     }
 }
