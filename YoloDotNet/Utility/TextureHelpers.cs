@@ -15,7 +15,8 @@ namespace YoloDotNet.Utility
             int height,
             IEnumerable<Segmentation> segmentations,
             bool doRGB = false,
-            Color4 tint = default)
+            Color4 tint = default,
+            bool useSegmentationColor = true)
         {
             if (segmentations is null)
                 segmentations = Enumerable.Empty<Segmentation>();
@@ -29,15 +30,6 @@ namespace YoloDotNet.Utility
             var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             var bytesPerPixel = doRGB ? 4 : 1;
             var finalMaskData = new byte[width * height * bytesPerPixel];
-
-            // Precompute premultiplied color bytes for RGBA path
-            byte aByte = (byte)(Math.Clamp(tint.A, 0f, 1f) * 255);
-            byte rByte = (byte)(Math.Clamp(tint.R, 0f, 1f) * 255);
-            byte gByte = (byte)(Math.Clamp(tint.G, 0f, 1f) * 255);
-            byte bByte = (byte)(Math.Clamp(tint.B, 0f, 1f) * 255);
-            byte rPremul = (byte)(rByte * aByte / 255);
-            byte gPremul = (byte)(gByte * aByte / 255);
-            byte bPremul = (byte)(bByte * aByte / 255);
 
             foreach (var seg in segmentations)
             {
@@ -54,6 +46,19 @@ namespace YoloDotNet.Utility
                 if (boxWidth == 0 || boxHeight == 0)
                     continue;
 
+                // Choose color: per-segmentation or global tint
+                var chosen = useSegmentationColor ? seg.Color : tint;
+                if (chosen == default)
+                {
+                    chosen = new Color4(1.0f, 1.0f, 1.0f, 1.0f);
+                }
+
+                // Precompute bytes for this segmentation
+                byte aByte = (byte)(Math.Clamp(chosen.A, 0f, 1f) * 255);
+                byte rPremul = (byte)(Math.Clamp(chosen.R, 0f, 1f) * aByte);
+                byte gPremul = (byte)(Math.Clamp(chosen.G, 0f, 1f) * aByte);
+                byte bPremul = (byte)(Math.Clamp(chosen.B, 0f, 1f) * aByte);
+
                 var mask = seg.BitPackedPixelMask;
 
                 // Unpack row-major bit-packed mask written with bbox.Width stride
@@ -61,7 +66,7 @@ namespace YoloDotNet.Utility
                 {
                     for (int x = 0; x < boxWidth; x++)
                     {
-                        int i = y * bbox.Width + x; // Important: use original bbox.Width for bit layout
+                        int i = y * bbox.Width + x; // Important: uses original bbox.Width
                         int byteIndex = i >> 3;
                         int bitIndex = i & 7;
 
