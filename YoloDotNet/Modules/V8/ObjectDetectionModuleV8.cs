@@ -40,6 +40,21 @@ namespace YoloDotNet.Modules.V8
             return results;
         }
 
+        public List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+        {
+            var ortValues = _yoloCore.Run(imageData, width, height);
+            using IDisposableReadOnlyCollection<OrtValue> _ = ortValues;
+
+            var ortSpan = ortValues[0].GetTensorDataAsSpan<float>();
+            var imageSize = new SKSizeI(width, height);
+
+            var results = ObjectDetection(imageSize, ortSpan, confidence, iou)
+                .Select(x => (ObjectDetection)x)
+                .ToList();
+
+            return results;
+        }
+
         #region Helper methods
 
         /// <summary>

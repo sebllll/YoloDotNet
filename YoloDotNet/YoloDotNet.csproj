@@ -20,6 +20,8 @@
     <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     
   <Platforms>AnyCPU;x64</Platforms>
+    
+  <BaseOutputPath>..\..\..\lib\</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -37,7 +39,7 @@
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.22.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.8" />
     <PackageReference Include="Stride.Graphics" Version="4.2.0.2121" />
-    <PackageReference Include="VL.CoreLib" Version="2025.7.0-0369-g117540fa59" />
+    <PackageReference Include="VL.CoreLib" Version="2025.7.0" />
   </ItemGroup>
 
   <ItemGroup>

@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 using YoloDotNet.Models;
 using Stride.Graphics;
 using Stride.Core.Mathematics;
-/*
+
 namespace YoloDotNet.Utility
 {
     public class SegmentationProcessor
@@ -60,17 +60,30 @@ namespace YoloDotNet.Utility
             {
                 byte* pixelData = (byte*)pixelsPtr.ToPointer();
 
-                // Itera sui pixel segmentati e assegna valori in scala di grigi
-                foreach (var pixel in segmentation.SegmentedPixels)
+                if (segmentation?.BitPackedPixelMask != null && segmentation.BitPackedPixelMask.Length > 0)
                 {
-                    int x = pixel.X;
-                    int y = pixel.Y;
-                    byte confidenceValue = (byte)(pixel.Confidence * 255); // Converti il valore di confidenza in un valore di scala di grigi (0-255)
-
-                    if (x >= 0 && x < width && y >= 0 && y < height)
+                    var bbox = segmentation.BoundingBox;
+                    for (int y = 0; y < bbox.Height; y++)
                     {
-                        int index = y * width + x;
-                        pixelData[index] = confidenceValue;
+                        for (int x = 0; x < bbox.Width; x++)
+                        {
+                            int bitIndex = y * bbox.Width + x;
+                            int byteIndex = bitIndex / 8;
+                            int bitInByte = bitIndex % 8;
+
+                            if ((segmentation.BitPackedPixelMask[byteIndex] & (1 << bitInByte)) != 0)
+                            {
+                                int absoluteX = bbox.Left + x;
+                                int absoluteY = bbox.Top + y;
+                                byte confidenceValue = 255; // No per-pixel confidence, use full value
+
+                                if (absoluteX >= 0 && absoluteX < width && absoluteY >= 0 && absoluteY < height)
+                                {
+                                    int index = absoluteY * width + absoluteX;
+                                    pixelData[index] = confidenceValue;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -102,17 +115,30 @@ namespace YoloDotNet.Utility
             {
                 byte* pixelData = (byte*)pixelsPtr.ToPointer();
 
-                // Itera sui pixel segmentati e assegna valori in scala di grigi
-                foreach (var pixel in segmentation.SegmentedPixels)
+                if (segmentation.BitPackedPixelMask != null && segmentation.BitPackedPixelMask.Length > 0)
                 {
-                    int x = pixel.X;
-                    int y = pixel.Y;
-                    byte confidenceValue = (byte)(pixel.Confidence * 255); // Converti il valore di confidenza in un valore di scala di grigi (0-255)
-
-                    if (x >= 0 && x < width && y >= 0 && y < height)
+                    var bbox = segmentation.BoundingBox;
+                    for (int y = 0; y < bbox.Height; y++)
                     {
-                        int index = y * width + x;
-                        pixelData[index] = confidenceValue;
+                        for (int x = 0; x < bbox.Width; x++)
+                        {
+                            int bitIndex = y * bbox.Width + x;
+                            int byteIndex = bitIndex / 8;
+                            int bitInByte = bitIndex % 8;
+
+                            if ((segmentation.BitPackedPixelMask[byteIndex] & (1 << bitInByte)) != 0)
+                            {
+                                int absoluteX = bbox.Left + x;
+                                int absoluteY = bbox.Top + y;
+                                byte confidenceValue = 255; // No per-pixel confidence, use full value
+
+                                if (absoluteX >= 0 && absoluteX < width && absoluteY >= 0 && absoluteY < height)
+                                {
+                                    int index = absoluteY * width + absoluteX;
+                                    pixelData[index] = confidenceValue;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -141,7 +167,7 @@ namespace YoloDotNet.Utility
                 numColors = colors.Count();
             }
 
-            //Build color bitmam
+            //Build color bitmap
             SKBitmap colorBitmap = CreateColorBitmap(width, height);
 
             if (segmentations == null || segmentations.Count() == 0)
@@ -160,27 +186,44 @@ namespace YoloDotNet.Utility
                 int segmentationIndex = 0;
                 foreach (var segmentation in segmentations)
                 {
+                    if (segmentation?.BitPackedPixelMask == null || segmentation.BitPackedPixelMask.Length == 0)
+                    {
+                        segmentationIndex++;
+                        continue;
+                    }
+
                     int colorindex = segmentationIndex % numColors;
                     SKColor color = sKColors[colorindex];
 
-                    //Pixel iteration
-                    foreach (var pixel in segmentation.SegmentedPixels)
+                    //Moltiplica il valore di confidenza per il colore
+                    SKColor pixelColor = confidenceToColor ? MultiplyColor(color, (float)segmentation.Confidence, confidenceToAlpha) : color;
+
+                    var bbox = segmentation.BoundingBox;
+                    for (int y = 0; y < bbox.Height; y++)
                     {
-                        int x = pixel.X;
-                        int y = pixel.Y;
-
-                        //Moltiplica il valore di confidenza per il colore
-                        SKColor pixelColor = confidenceToColor ? MultiplyColor(color, (float)pixel.Confidence, confidenceToAlpha) : color;
-
-                        if (x >= 0 && x < width && y >= 0 && y < height)
+                        for (int x = 0; x < bbox.Width; x++)
                         {
-                            int index = y * width + x;
-                            pixelData[index] = (uint)pixelColor;
+                            int bitIndex = y * bbox.Width + x;
+                            int byteIndex = bitIndex / 8;
+                            int bitInByte = bitIndex % 8;
+
+                            if ((segmentation.BitPackedPixelMask[byteIndex] & (1 << bitInByte)) != 0)
+                            {
+                                int absoluteX = bbox.Left + x;
+                                int absoluteY = bbox.Top + y;
+
+                                if (absoluteX >= 0 && absoluteX < width && absoluteY >= 0 && absoluteY < height)
+                                {
+                                    int index = absoluteY * width + absoluteX;
+                                    pixelData[index] = (uint)pixelColor;
+                                }
+                            }
                         }
                     }
                     segmentationIndex++;
                 }
             }
+
             // Build SKImage from bitmap
             return SKImage.FromBitmap(colorBitmap);
         }
@@ -213,38 +256,50 @@ namespace YoloDotNet.Utility
             int segmentationIndex = 0;
             foreach (var segmentation in segmentations)
             {
-                if (segmentation == null || segmentation.SegmentedPixels == null)
+                if (segmentation?.BitPackedPixelMask == null || segmentation.BitPackedPixelMask.Length == 0)
+                {
+                    segmentationIndex++;
                     continue;
+                }
 
                 int colorindex = segmentationIndex % numColors;
                 Color4 baseColor = strideColors[colorindex]; // Use Color4
 
-                //Pixel iteration
-                foreach (var pixel in segmentation.SegmentedPixels)
+                // Apply confidence to color and/or alpha using Color4
+                Color4 pixelColorWithConfidence = baseColor;
+                if (confidenceToColor)
                 {
-                    int x = pixel.X;
-                    int y = pixel.Y;
+                    // Use the Color4 overload of MultiplyColor
+                    pixelColorWithConfidence = MultiplyColor(baseColor, (float)segmentation.Confidence, confidenceToAlpha);
+                }
+                else if (confidenceToAlpha) // Apply confidence to alpha only if confidenceToColor is false
+                {
+                    float newAlpha = Math.Clamp(baseColor.A * (float)segmentation.Confidence, 0f, 1f);
+                    pixelColorWithConfidence = new Color4(baseColor.R, baseColor.G, baseColor.B, newAlpha);
+                }
+                // else: pixelColorWithConfidence remains baseColor as initialized
 
-                    // Apply confidence to color and/or alpha using Color4
-                    Color4 pixelColorWithConfidence = baseColor;
-                    if (confidenceToColor)
+                var bbox = segmentation.BoundingBox;
+                for (int y = 0; y < bbox.Height; y++)
+                {
+                    for (int x = 0; x < bbox.Width; x++)
                     {
-                        // Use the Color4 overload of MultiplyColor
-                        pixelColorWithConfidence = MultiplyColor(baseColor, (float)pixel.Confidence, confidenceToAlpha);
-                    }
-                    else if (confidenceToAlpha) // Apply confidence to alpha only if confidenceToColor is false
-                    {
-                        float newAlpha = Math.Clamp(baseColor.A * (float)pixel.Confidence, 0f, 1f);
-                        pixelColorWithConfidence = new Color4(baseColor.R, baseColor.G, baseColor.B, newAlpha);
-                    }
-                    // else: pixelColorWithConfidence remains baseColor as initialized
+                        int bitIndex = y * bbox.Width + x;
+                        int byteIndex = bitIndex / 8;
+                        int bitInByte = bitIndex % 8;
 
+                        if ((segmentation.BitPackedPixelMask[byteIndex] & (1 << bitInByte)) != 0)
+                        {
+                            int absoluteX = bbox.Left + x;
+                            int absoluteY = bbox.Top + y;
 
-                    if (x >= 0 && x < width && y >= 0 && y < height)
-                    {
-                        int index = y * width + x;
-                        // Convert Color4 to uint (RGBA for Stride Texture R8G8B8A8_UNorm)
-                        pixelData[index] = (uint)pixelColorWithConfidence.ToRgba();
+                            if (absoluteX >= 0 && absoluteX < width && absoluteY >= 0 && absoluteY < height)
+                            {
+                                int index = absoluteY * width + absoluteX;
+                                // Convert Color4 to uint (RGBA for Stride Texture R8G8B8A8_UNorm)
+                                pixelData[index] = (uint)pixelColorWithConfidence.ToRgba();
+                            }
+                        }
                     }
                 }
                 segmentationIndex++;
@@ -258,4 +313,3 @@ namespace YoloDotNet.Utility
         }
     }
 }
-*/

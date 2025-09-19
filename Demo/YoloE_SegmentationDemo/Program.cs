@@ -101,7 +101,7 @@ namespace YoloE_SegmentationDemo
             using var image = SKBitmap.Decode(SharedConfig.GetTestImage(ImageType.People));
 
             // Run inference
-            var results = yolo.RunSegmentation(image, confidence: 0.20, pixelConfedence: 0.5, iou: 0.7);
+            var results = yolo.RunSegmentation(image, confidence: 0.20, pixelConfidence: 0.5, iou: 0.7);
 
             // Draw results
             image.Draw(results, _drawingOptions);

@@ -13,6 +13,7 @@ namespace YoloDotNet.Modules.V10
         public event EventHandler VideoStatusEvent = delegate { };
 
         public OnnxModel OnnxModel => _yoloCore.OnnxModel;
+        private readonly ObjectDetectionModuleV8 _objectDetectionModuleV8 = default!;
 
         public ObjectDetectionModuleV10(YoloCore yoloCore)
         {
@@ -31,6 +32,9 @@ namespace YoloDotNet.Modules.V10
 
             return results;
         }
+
+        public List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => _objectDetectionModuleV8.ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou);
 
         #region Helper methods
 
