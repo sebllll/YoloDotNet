@@ -8,8 +8,10 @@ namespace YoloDotNet.Utility
 {
     public static class TextureHelpers
     {
-        // Compositor: assumes segmentations are already filtered/cropped/scaled upstream.
-        // Renders into a possibly larger output texture (outputTexWidth/outputTexHeight).
+        // Optimized binary mask renderer.
+        // confidenceToAlpha:
+        //   false -> alpha = chosen.A
+        //   true  -> alpha = chosen.A * seg.Confidence (still uniform per segmentation; mask is binary)
         public static Texture TextureFromSegmentations(
             GraphicsDevice device,
             int width,
@@ -18,21 +20,21 @@ namespace YoloDotNet.Utility
             bool doRGB = false,
             Color4 tint = default,
             bool useSegmentationColor = true,
+            bool confidenceToAlpha = false,
             int outputTexWidth = 0,
             int outputTexHeight = 0)
         {
-            if (segmentations is null)
-                segmentations = Enumerable.Empty<Segmentation>();
+            segmentations ??= Enumerable.Empty<Segmentation>();
 
             if (tint == default)
-                tint = new Color4(1.0f, 1.0f, 1.0f, 1.0f);
+                tint = new Color4(1f, 1f, 1f, 1f);
 
             int outW = outputTexWidth > 0 ? outputTexWidth : width;
             int outH = outputTexHeight > 0 ? outputTexHeight : height;
 
-            var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
-            var bytesPerPixel = doRGB ? 4 : 1;
-            var finalMaskData = new byte[outW * outH * bytesPerPixel];
+            var format = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
+            int bpp = doRGB ? 4 : 1;
+            byte[] dst = new byte[outW * outH * bpp];
 
             foreach (var seg in segmentations)
             {
@@ -40,67 +42,84 @@ namespace YoloDotNet.Utility
                     continue;
 
                 var bbox = seg.BoundingBox;
-                if (bbox.Width <= 0 || bbox.Height <= 0)
+                int bw = bbox.Width;
+                int bh = bbox.Height;
+                if (bw <= 0 || bh <= 0)
                     continue;
+
+                // Clip to output
+                int left = Math.Max(0, bbox.Left);
+                int top = Math.Max(0, bbox.Top);
+                int right = Math.Min(outW, bbox.Right);
+                int bottom = Math.Min(outH, bbox.Bottom);
+                if (left >= right || top >= bottom)
+                    continue;
+
+                int startXInMask = Math.Max(0, -bbox.Left);
+                int startYInMask = Math.Max(0, -bbox.Top);
 
                 var chosen = useSegmentationColor ? seg.Color : tint;
                 if (chosen == default)
                     chosen = new Color4(1f, 1f, 1f, 1f);
 
-                // Premultiplied color for RGBA path
-                byte aByte = (byte)(Math.Clamp(chosen.A, 0f, 1f) * 255);
-                byte rPremul = (byte)(Math.Clamp(chosen.R, 0f, 1f) * aByte);
-                byte gPremul = (byte)(Math.Clamp(chosen.G, 0f, 1f) * aByte);
-                byte bPremul = (byte)(Math.Clamp(chosen.B, 0f, 1f) * aByte);
-
-                // Clip against output canvas (supports offsets larger than source width/height)
-                int drawLeft = Math.Max(0, bbox.Left);
-                int drawTop = Math.Max(0, bbox.Top);
-                int drawRight = Math.Min(outW, bbox.Right);
-                int drawBottom = Math.Min(outH, bbox.Bottom);
-
-                if (drawRight <= 0 || drawBottom <= 0 || drawLeft >= outW || drawTop >= outH)
+                float aBase = Math.Clamp(chosen.A, 0f, 1f);
+                if (aBase <= 0f)
                     continue;
 
-                // Compute where to start reading from the mask if bbox is partially outside
-                int startXInMask = Math.Max(0, -bbox.Left);
-                int startYInMask = Math.Max(0, -bbox.Top);
+                float segConf = confidenceToAlpha ? (float)Math.Clamp(seg.Confidence, 0.0, 1.0) : 1f;
+                float alphaFactor = aBase * segConf;
+                if (alphaFactor <= 0f)
+                    continue;
+
+                byte aByte = (byte)(alphaFactor * 255f);
+
+                byte rPremul = 0, gPremul = 0, bPremul = 0;
+                if (doRGB)
+                {
+                    float r = Math.Clamp(chosen.R, 0f, 1f);
+                    float g = Math.Clamp(chosen.G, 0f, 1f);
+                    float b = Math.Clamp(chosen.B, 0f, 1f);
+                    rPremul = (byte)(r * aByte);
+                    gPremul = (byte)(g * aByte);
+                    bPremul = (byte)(b * aByte);
+                }
 
                 var mask = seg.BitPackedPixelMask;
-                int maskStride = bbox.Width;
+                int maskStride = bw;
 
-                for (int ty = drawTop; ty < drawBottom; ty++)
+                for (int ty = top; ty < bottom; ty++)
                 {
-                    int yInMask = startYInMask + (ty - drawTop);
-                    for (int tx = drawLeft; tx < drawRight; tx++)
+                    int yMask = startYInMask + (ty - top);
+                    int baseDst = ty * outW + left;
+                    int rowMaskStart = yMask * maskStride;
+
+                    for (int tx = left; tx < right; tx++)
                     {
-                        int xInMask = startXInMask + (tx - drawLeft);
+                        int xMask = startXInMask + (tx - left);
+                        int idx = rowMaskStart + xMask;
 
-                        int i = yInMask * maskStride + xInMask;
-                        int byteIndex = i >> 3;
-                        int bitIndex = i & 7;
-
-                        if ((mask[byteIndex] & (1 << bitIndex)) == 0)
+                        int byteIndex = idx >> 3;
+                        int bitShift = idx & 7;
+                        if ((mask[byteIndex] & (1 << bitShift)) == 0)
                             continue;
 
-                        int destIndex = (ty * outW + tx) * bytesPerPixel;
+                        int destIndex = (baseDst + (tx - left)) * bpp;
 
                         if (doRGB)
                         {
-                            // Max-over alpha composition
-                            if (aByte > finalMaskData[destIndex + 3])
+                            // Max alpha: overwrite only if higher alpha (binary uniform aByte so single compare)
+                            if (aByte > dst[destIndex + 3])
                             {
-                                finalMaskData[destIndex + 0] = rPremul; // R
-                                finalMaskData[destIndex + 1] = gPremul; // G
-                                finalMaskData[destIndex + 2] = bPremul; // B
-                                finalMaskData[destIndex + 3] = aByte;   // A
+                                dst[destIndex + 0] = rPremul;
+                                dst[destIndex + 1] = gPremul;
+                                dst[destIndex + 2] = bPremul;
+                                dst[destIndex + 3] = aByte;
                             }
                         }
                         else
                         {
-                            // Grayscale max
-                            if (aByte > finalMaskData[destIndex])
-                                finalMaskData[destIndex] = aByte;
+                            if (aByte > dst[destIndex])
+                                dst[destIndex] = aByte;
                         }
                     }
                 }
@@ -110,8 +129,8 @@ namespace YoloDotNet.Utility
                 device,
                 outW,
                 outH,
-                pixelFormat,
-                finalMaskData,
+                format,
+                dst,
                 TextureFlags.ShaderResource,
                 GraphicsResourceUsage.Immutable);
         }

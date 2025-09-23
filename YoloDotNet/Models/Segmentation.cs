@@ -35,42 +35,76 @@ namespace YoloDotNet.Models
             init => _baseBoundingBox = value;
         }
 
-        /// <summary>
-        /// Bit-packed mask where each bit represents a pixel with confidence above a threshold (1 = present, 0 = absent).
-        /// </summary>
+        // Bit-packed binary mask (1 = present, 0 = absent)
         public byte[] BitPackedPixelMask { get; set; } = [];
 
         /// <summary>
-        /// Unpacks the bit-packed pixel mask and yields each pixel's location and confidence.
+        /// Enumerates all set pixels (bit=1) in the mask.
+        /// Confidence is uniform = Segmentation.Confidence (binary mask has no per-pixel grades).
+        /// Optimized to skip zero bytes.
         /// </summary>
         /// <returns>An enumerable of tuples, each containing the absolute X and Y coordinates and the detection confidence for a pixel in the mask.</returns>
         public IEnumerable<(int X, int Y, double Confidence)> UnpackMask()
         {
-            if (BitPackedPixelMask == null || BitPackedPixelMask.Length == 0)
-            {
+            var mask = BitPackedPixelMask;
+            if (mask is null || mask.Length == 0)
                 yield break;
-            }
 
-            var (width, height) = (_baseBoundingBox.Width, _baseBoundingBox.Height);
+            int width = _baseBoundingBox.Width;
+            int height = _baseBoundingBox.Height;
             if (width <= 0 || height <= 0)
-            {
                 yield break;
-            }
 
+            double conf = Confidence;
+
+            // Row-major scan
             for (int y = 0; y < height; y++)
             {
-                for (int x = 0; x < width; x++)
-                {
-                    int bitIndex = y * width + x;
-                    int byteIndex = bitIndex / 8;
-                    int bitInByte = bitIndex % 8;
+                int rowBitStart = y * width;
+                int bit = 0;
 
-                    if (byteIndex < BitPackedPixelMask.Length && (BitPackedPixelMask[byteIndex] & (1 << bitInByte)) != 0)
+                // Process full bytes
+                int fullBytes = width >> 3;        // width / 8
+                int remainder = width & 7;         // width % 8
+                int byteIndex = rowBitStart >> 3;
+
+                // Handle aligned full bytes
+                for (int b = 0; b < fullBytes; b++, byteIndex++)
+                {
+                    byte m = mask[byteIndex];
+                    if (m == 0)
                     {
-                        yield return (
-                            _baseBoundingBox.Left + x + _offset.X,
-                            _baseBoundingBox.Top + y + _offset.Y,
-                            this.Confidence);
+                        bit += 8;
+                        continue;
+                    }
+
+                    // Expand only set bits
+                    // Check each bit (LSB first as encoded)
+                    if ((m & 0x01) != 0) yield return (_baseBoundingBox.Left + bit + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x02) != 0) yield return (_baseBoundingBox.Left + bit + 1 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x04) != 0) yield return (_baseBoundingBox.Left + bit + 2 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x08) != 0) yield return (_baseBoundingBox.Left + bit + 3 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x10) != 0) yield return (_baseBoundingBox.Left + bit + 4 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x20) != 0) yield return (_baseBoundingBox.Left + bit + 5 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x40) != 0) yield return (_baseBoundingBox.Left + bit + 6 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+                    if ((m & 0x80) != 0) yield return (_baseBoundingBox.Left + bit + 7 + _offset.X, _baseBoundingBox.Top + y + _offset.Y, conf);
+
+                    bit += 8;
+                }
+
+                // Remainder bits (0..7)
+                if (remainder > 0)
+                {
+                    byte m = mask[byteIndex];
+                    for (int r = 0; r < remainder; r++)
+                    {
+                        if ((m & (1 << r)) != 0)
+                        {
+                            int xLocal = bit + r;
+                            yield return (_baseBoundingBox.Left + xLocal + _offset.X,
+                                          _baseBoundingBox.Top + y + _offset.Y,
+                                          conf);
+                        }
                     }
                 }
             }
