@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Stride.Graphics;
 using Stride.Core.Mathematics;
+using CommunityToolkit.HighPerformance.Buffers;
 
 namespace YoloDotNet.Utility
 {
@@ -32,7 +33,8 @@ namespace YoloDotNet.Utility
 
             var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             var bytesPerPixel = doRGB ? 4 : 1;
-            var finalMaskData = new byte[outW * outH * bytesPerPixel];
+            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bytesPerPixel);
+            var finalMaskData = buffer.Span;
 
             foreach (var seg in segmentations)
             {
@@ -106,14 +108,21 @@ namespace YoloDotNet.Utility
                 }
             }
 
-            return Texture.New2D(
-                device,
-                outW,
-                outH,
-                pixelFormat,
-                finalMaskData,
-                TextureFlags.ShaderResource,
-                GraphicsResourceUsage.Immutable);
+            unsafe
+            {
+                fixed (byte* dataPtr = finalMaskData)
+                {
+                    return Texture.New2D(
+                        device,
+                        outW,
+                        outH,
+                        mipCount: 1,
+                        format: pixelFormat,
+                        textureData: [new DataBox((nint)dataPtr, outW * bytesPerPixel, finalMaskData.Length)],
+                        textureFlags: TextureFlags.ShaderResource,
+                        usage: GraphicsResourceUsage.Immutable);
+                }
+            }
         }
     }
 }
