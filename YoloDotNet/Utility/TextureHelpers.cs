@@ -33,7 +33,7 @@ namespace YoloDotNet.Utility
 
             var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             var bytesPerPixel = doRGB ? 4 : 1;
-            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bytesPerPixel);
+            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bytesPerPixel,AllocationMode.Clear);
             var finalMaskData = buffer.Span;
 
             foreach (var seg in segmentations)
