@@ -230,17 +230,17 @@ namespace YoloDotNet.Utility
 
         public static Texture SegmentationsToTexture2D(GraphicsDevice device, int width, int height, IEnumerable<Segmentation> segmentations, IEnumerable<Color4> colors, bool confidenceToColor = true, bool confidenceToAlpha = false)
         {
-            List<Color4> strideColors = new List<Color4>(); // Changed from SKColor to Color4
+            List<Color4> strideColors = new List<Color4>();
             int numColors = 0;
             //set default color is non provided
             if (colors == null || !colors.Any())
             {
-                strideColors.Add(Color4.White); // Use Color4.White
+                strideColors.Add(Color4.White); 
                 numColors = 1;
             }
             else
             {
-                strideColors = colors.ToList(); // This is now correct: List<Color4>
+                strideColors = colors.ToList(); 
                 numColors = strideColors.Count();
             }
 
@@ -263,7 +263,7 @@ namespace YoloDotNet.Utility
                 }
 
                 int colorindex = segmentationIndex % numColors;
-                Color4 baseColor = strideColors[colorindex]; // Use Color4
+                Color4 baseColor = strideColors[colorindex];
 
                 // Apply confidence to color and/or alpha using Color4
                 Color4 pixelColorWithConfidence = baseColor;
