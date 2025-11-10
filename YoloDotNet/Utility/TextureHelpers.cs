@@ -33,10 +33,10 @@ namespace YoloDotNet.Utility
             int outW = outputTexWidth > 0 ? outputTexWidth : width;
             int outH = outputTexHeight > 0 ? outputTexHeight : height;
 
-            var pixelFormat = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
-            var bytesPerPixel = doRGB ? 4 : 1;
-            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bytesPerPixel,AllocationMode.Clear);
-            var finalMaskData = buffer.Span;
+            var format = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
+            int bpp = doRGB ? 4 : 1;
+            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bpp, AllocationMode.Clear);
+            var dst = buffer.Span;
 
             foreach (var seg in segmentations)
             {
@@ -129,15 +129,15 @@ namespace YoloDotNet.Utility
 
             unsafe
             {
-                fixed (byte* dataPtr = finalMaskData)
+                fixed (byte* dataPtr = dst)
                 {
                     return Texture.New2D(
                         device,
                         outW,
                         outH,
                         mipCount: 1,
-                        format: pixelFormat,
-                        textureData: [new DataBox((nint)dataPtr, outW * bytesPerPixel, finalMaskData.Length)],
+                        format: format,
+                        textureData: [new DataBox((nint)dataPtr, outW * bpp, dst.Length)],
                         textureFlags: TextureFlags.ShaderResource,
                         usage: GraphicsResourceUsage.Immutable);
                 }
