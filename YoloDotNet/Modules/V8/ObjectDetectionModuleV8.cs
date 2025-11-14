@@ -42,8 +42,8 @@ namespace YoloDotNet.Modules.V8
 
         public List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
         {
-            var ortValues = _yoloCore.Run(imageData, width, height);
-            using IDisposableReadOnlyCollection<OrtValue> _ = ortValues;
+            using var ortValues = _yoloCore.Run(imageData, width, height);
+            //using IDisposableReadOnlyCollection<OrtValue> _ = ortValues;
 
             var ortSpan = ortValues[0].GetTensorDataAsSpan<float>();
             var imageSize = new SKSizeI(width, height);

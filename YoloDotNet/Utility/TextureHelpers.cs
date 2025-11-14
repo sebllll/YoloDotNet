@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Stride.Graphics;
 using Stride.Core.Mathematics;
+using CommunityToolkit.HighPerformance.Buffers;
 
 namespace YoloDotNet.Utility
 {
@@ -34,7 +35,8 @@ namespace YoloDotNet.Utility
 
             var format = doRGB ? PixelFormat.R8G8B8A8_UNorm : PixelFormat.R8_UNorm;
             int bpp = doRGB ? 4 : 1;
-            byte[] dst = new byte[outW * outH * bpp];
+            using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bpp, AllocationMode.Clear);
+            var dst = buffer.Span;
 
             foreach (var seg in segmentations)
             {
@@ -125,14 +127,21 @@ namespace YoloDotNet.Utility
                 }
             }
 
-            return Texture.New2D(
-                device,
-                outW,
-                outH,
-                format,
-                dst,
-                TextureFlags.ShaderResource,
-                GraphicsResourceUsage.Immutable);
+            unsafe
+            {
+                fixed (byte* dataPtr = dst)
+                {
+                    return Texture.New2D(
+                        device,
+                        outW,
+                        outH,
+                        mipCount: 1,
+                        format: format,
+                        textureData: [new DataBox((nint)dataPtr, outW * bpp, dst.Length)],
+                        textureFlags: TextureFlags.ShaderResource,
+                        usage: GraphicsResourceUsage.Immutable);
+                }
+            }
         }
     }
 }
