@@ -89,8 +89,8 @@ namespace YoloDotNet
         /// <param name="pixelConfidence"></param>
         /// <param name="iou"></param>
         /// <returns></returns>
-        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.2, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = -1, bool cropToBB = true, double scaleBB = 1.0, Func<ObjectResult, bool>? bboxFilter = null)
-            => ((ISegmentationModule)_module).ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter);
+        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.2, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = -1, bool cropToBB = true, double scaleBB = 1.0, Func<ObjectResult, bool>? bboxFilter = null, int maxBoundingBoxesToProcess = 250)
+            => ((ISegmentationModule)_module).ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter, maxBoundingBoxesToProcess);
 
         /// <summary>
         /// Runs pose estimation on a given image.
