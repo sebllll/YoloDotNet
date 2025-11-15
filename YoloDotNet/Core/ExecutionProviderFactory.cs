@@ -27,6 +27,12 @@ namespace YoloDotNet.Core
                 case TensorRtExecutionProvider trtProvider:
                     ConfigureTensorRT(trtProvider, options);
                     break;
+                case DirectMLExecutionProvider dmlProvider:
+                    ConfigureDirectML(dmlProvider.GpuId, options);
+                    break;
+                case DirectMLNpuExecutionProvider dmlNpuProvider:
+                    ConfigureDirectMLNpu(dmlNpuProvider.GpuId, options);
+                    break;
                 default:
                     throw new YoloDotNetUnsupportedProviderException($"Unknown execution provider: {config.GetType().Name}");
             }
@@ -59,6 +65,16 @@ namespace YoloDotNet.Core
             });
 
             options.AppendExecutionProvider_CUDA(cudaOptions);
+        }
+
+        private static void ConfigureDirectML(int gpuId, SessionOptions options)
+        {
+            options.AppendExecutionProvider_DML(gpuId);
+        }
+
+        private static void ConfigureDirectMLNpu(int gpuId, SessionOptions options)
+        {
+            options.AppendExecutionProvider("DML", new Dictionary<string, string> { { "device_id", gpuId.ToString() }, { "performance_preference", "high_performance" } });
         }
 
         private static void ConfigureTensorRT(ITensorRTExecutionProvider provider, SessionOptions options)

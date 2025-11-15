@@ -8,6 +8,10 @@ namespace YoloDotNet.Core
 
     public record CudaExecutionProvider(int GpuId = 0, bool PrimeGpu = false) : IExecutionProvider;
 
+    public record DirectMLExecutionProvider(int GpuId = 0) : IExecutionProvider;
+
+    public record DirectMLNpuExecutionProvider(int GpuId = 0) : IExecutionProvider;
+
     public record TensorRtExecutionProvider() : ITensorRTExecutionProvider
     {
         public TrtPrecision Precision { get; init; }
