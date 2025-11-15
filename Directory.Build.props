@@ -1,0 +1,10 @@
+<Project>
+  <!--
+    This file overrides the "_StrideCheckVisualCRuntime2019" MSBuild target
+    from the Stride.Core NuGet package. The original target incorrectly fails
+    the build on ARM64 machines or when a newer VC++ Redistributable is installed.
+    By defining an empty target with the same name, we prevent the check from running
+    and allow the build to proceed.
+  -->
+  <Target Name="_StrideCheckVisualCRuntime2019" />
+</Project>
