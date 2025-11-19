@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -44,7 +44,9 @@ Reusing or recreating YoloDotNet objects? No more "OrtEnv singleton instance alr
 
   <ItemGroup>
     <PackageReference Include="Microsoft.ML.OnnxRuntime.Gpu" Version="1.22.1" />
-    <PackageReference Include="SkiaSharp" Version="3.119.0" />
+    <PackageReference Include="SkiaSharp" Version="2.88.6" />
+    <PackageReference Include="Stride.Graphics" Version="4.2.0.2993" />
+    <PackageReference Include="CommunityToolkit.HighPerformance" Version="8.3.2" />
   </ItemGroup>
 
 </Project>
