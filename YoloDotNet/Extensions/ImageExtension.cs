@@ -201,12 +201,20 @@ namespace YoloDotNet.Extensions
 
             float margin = fontSize / 2;
 
+            // Create a paint object for measuring text (SKFont.MeasureText doesn't accept string in 2.88.6)
+            using var measurePaint = new SKPaint
+            {
+                Typeface = options.Font,
+                TextSize = fontSize,
+                IsAntialias = true
+            };
+
             // Measure maximum text-length in order to determine the width of the transparent box
             float boxMaxWidth = 0;
             float boxMaxHeight = 0 - margin / 2;
             foreach (var label in labels)
             {
-                var lineWidth = font.MeasureText(LabelText(label.Label, label.Confidence, drawConfidence));
+                var lineWidth = measurePaint.MeasureText(LabelText(label.Label, label.Confidence, drawConfidence));
                 if (lineWidth > boxMaxWidth)
                     boxMaxWidth = lineWidth;
 
@@ -400,6 +408,14 @@ namespace YoloDotNet.Extensions
             var shadowOffset = ImageConfig.SHADOW_OFFSET;
             var labelOffset = (int)borderThickness / 2;
 
+            // Create a paint object for measuring text (SKFont.MeasureText doesn't accept string in 2.88.6)
+            using var measurePaint = new SKPaint
+            {
+                Typeface = options.Font,
+                TextSize = fontSize,
+                IsAntialias = true
+            };
+
             // Label box background paint
             using var labelBgPaint = new SKPaint
             {
@@ -431,7 +447,7 @@ namespace YoloDotNet.Extensions
                     : detection.Label.Name;
 
                 var labelText = LabelText(text, detection.Confidence, options.DrawConfidenceScore);
-                var labelWidth = (int)font.MeasureText(labelText);
+                var labelWidth = (int)measurePaint.MeasureText(labelText);
 
                 labelBgPaint.Color = boxColor;
                 boxPaint.Color = boxColor;
@@ -573,6 +589,14 @@ namespace YoloDotNet.Extensions
             var shadowOffset = ImageConfig.SHADOW_OFFSET;
             int labelBoxAlpha = options.BoundingBoxOpacity;
 
+            // Create a paint object for measuring text (SKFont.MeasureText doesn't accept string in 2.88.6)
+            using var measurePaint = new SKPaint
+            {
+                Typeface = options.Font,
+                TextSize = fontSize,
+                IsAntialias = true
+            };
+
             // Paint buckets
             using var boxPaint = new SKPaint() { Style = SKPaintStyle.Stroke, StrokeWidth = borderThickness };
 
@@ -595,7 +619,7 @@ namespace YoloDotNet.Extensions
 
                 var labelText = LabelText(detection.Label.Name, detection.Confidence, options.DrawConfidenceScore);
 
-                var labelWidth = (int)font.MeasureText(labelText);
+                var labelWidth = (int)measurePaint.MeasureText(labelText);
 
                 // Draw rotated bounding box
                 if (options.DrawBoundingBoxes)
