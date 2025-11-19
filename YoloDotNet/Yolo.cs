@@ -117,6 +117,24 @@ namespace YoloDotNet
         public List<Segmentation> RunSegmentation(SKImage img, double confidence = 0.2, double pixelConfedence = 0.65, double iou = 0.7)
             => ((ISegmentationModule)_detection).ProcessImage(img, confidence, pixelConfedence, iou);
 
+        /// <summary>
+        /// Runs instance segmentation on raw image data.
+        /// </summary>
+        /// <param name="imageData">The raw image data as a byte array (RGBA format).</param>
+        /// <param name="width">The width of the image.</param>
+        /// <param name="height">The height of the image.</param>
+        /// <param name="confidence">The confidence threshold for filtering detected objects (default is 0.2).</param>
+        /// <param name="pixelConfidence">The confidence threshold for the pixels in the segmentation mask (default is 0.65).</param>
+        /// <param name="iou">The Intersection over Union (IoU) threshold for non-maximum suppression (default is 0.7).</param>
+        /// <param name="labelIndex">Filter by specific class label index (-1 for all labels, default is -1).</param>
+        /// <param name="cropToBB">Whether to crop the mask to the bounding box of the detected object (default is true).</param>
+        /// <param name="scaleBB">A scaling factor for the bounding box when cropping (default is 1.0).</param>
+        /// <param name="bboxFilter">Optional filter function to further filter bounding boxes (default is null).</param>
+        /// <param name="maxBoundingBoxesToProcess">Maximum number of bounding boxes to process (default is 250).</param>
+        /// <returns>A list of segmentation results, including masks and bounding boxes.</returns>
+        public List<Segmentation> RunSegmentation(byte[] imageData, int width, int height, double confidence = 0.2, double pixelConfidence = 0.65, double iou = 0.7, int labelIndex = -1, bool cropToBB = true, double scaleBB = 1.0, Func<ObjectResult, bool>? bboxFilter = null, int maxBoundingBoxesToProcess = 250)
+            => ((ISegmentationModule)_detection).ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter, maxBoundingBoxesToProcess);
+
         #endregion
 
         #region Pose Estimation
