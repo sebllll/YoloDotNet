@@ -14,7 +14,7 @@ namespace YoloDotNet.Extensions
             RunOptions runOptions,
             ArrayPool<float> customSizeFloatPool,
             PinnedMemoryBufferPool pinnedMemoryPool,
-            SKSamplingOptions samplingOptions)
+            SKFilterQuality filterQuality)
         {
             // Get input shape.
             var inputShape = Array.ConvertAll(session.InputMetadata[session.InputNames[0]].Dimensions, Convert.ToInt64);
@@ -47,11 +47,11 @@ namespace YoloDotNet.Extensions
             ortIoBinding.SynchronizeBoundOutputs();
 
             // Initialize.
-            session.InitializeGpu(customSizeFloatPool, pinnedMemoryPool, samplingOptions);
+            session.InitializeGpu(customSizeFloatPool, pinnedMemoryPool, filterQuality);
         }
 
         
-        private static void InitializeGpu(this InferenceSession session, ArrayPool<float> customSizeFloatPool, PinnedMemoryBufferPool pinnedMemoryPool, SKSamplingOptions samplingOptions)
+        private static void InitializeGpu(this InferenceSession session, ArrayPool<float> customSizeFloatPool, PinnedMemoryBufferPool pinnedMemoryPool, SKFilterQuality filterQuality)
         {
             // Get model data from session
             var inputName = session.InputNames[0];
@@ -69,7 +69,7 @@ namespace YoloDotNet.Extensions
 
             try
             {
-                _ = img.ResizeImageProportional(samplingOptions, pinnedMemoryBuffer);
+                _ = img.ResizeImageProportional(filterQuality, pinnedMemoryBuffer);
 
                 var normalizedTensorPixels = pinnedMemoryBuffer.Pointer.NormalizePixelsToTensor([batchSize, channels, width, height], tensorBufferSize, tensorArrayBuffer);
 

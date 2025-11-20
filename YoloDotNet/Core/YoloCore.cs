@@ -64,7 +64,7 @@ namespace YoloDotNet.Core
                         _runOptions,
                         customSizeFloatPool,
                         _pinnedMemoryPool,
-                        YoloOptions.SamplingOptions);
+                        YoloOptions.FilterQuality);
             }
 
             // Run frame-save service
@@ -128,8 +128,8 @@ namespace YoloDotNet.Core
                 lock (_progressLock)
                 {
                     var originalImageSize = YoloOptions.ImageResize == ImageResize.Proportional
-                        ? image.ResizeImageProportional(YoloOptions.SamplingOptions, pinnedBuffer)
-                        : image.ResizeImageStretched(YoloOptions.SamplingOptions, pinnedBuffer);
+                        ? image.ResizeImageProportional(YoloOptions.FilterQuality, pinnedBuffer)
+                        : image.ResizeImageStretched(YoloOptions.FilterQuality, pinnedBuffer);
 
                     var tensorPixels = pinnedBuffer.Pointer.NormalizePixelsToTensor(OnnxModel.InputShape, _tensorBufferSize, tensorArrayBuffer);
                     using var inputOrtValue = OrtValue.CreateTensorValueFromMemory(OrtMemoryInfo.DefaultInstance, tensorPixels.Buffer, OnnxModel.InputShape);

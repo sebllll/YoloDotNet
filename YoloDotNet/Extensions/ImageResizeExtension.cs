@@ -13,7 +13,7 @@ namespace YoloDotNet.Extensions
         /// <param name="samplingOptions">Sampling options used during resizing.</param>
         /// <param name="pinnedMemoryBuffer">A pinned memory buffer where the resized image will be written.</param>
         /// <returns>A tuple containing a pointer to the resized image data and its dimensions.</returns>
-        public static SKSizeI ResizeImageStretched<T>(this T img, SKSamplingOptions samplingOptions, PinnedMemoryBuffer pinnedMemoryBuffer)
+        public static SKSizeI ResizeImageStretched<T>(this T img, SKFilterQuality filterQuality, PinnedMemoryBuffer pinnedMemoryBuffer)
         {
             SKImage image = default!;
 
@@ -28,7 +28,12 @@ namespace YoloDotNet.Extensions
             var srcRect = new SKRect(0, 0, image.Width, image.Height);
             var destRect = new SKRect(0, 0, modelWidth, modelHeight);
 
-            pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, destRect, samplingOptions);
+            var paint = new SKPaint
+            {
+                FilterQuality = filterQuality
+            };
+
+            pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, destRect, paint);
 
             // Return the original image dimensions, which are required to correctly scale bounding boxes
             return new SKSizeI(image.Width, image.Height);
@@ -41,7 +46,7 @@ namespace YoloDotNet.Extensions
         /// <param name="samplingOptions">Sampling options used during resizing.</param>
         /// <param name="pinnedMemoryBuffer">A pinned memory buffer where the resized image will be written.</param>
         /// <returns>A tuple containing a pointer to the resized image data and its dimensions.</returns>
-        public static SKSizeI ResizeImageProportional<T>(this T img, SKSamplingOptions samplingOptions, PinnedMemoryBuffer pinnedMemoryBuffer)
+        public static SKSizeI ResizeImageProportional<T>(this T img, SKFilterQuality filterQuality, PinnedMemoryBuffer pinnedMemoryBuffer)
         {
             SKImage image = default!;
 
@@ -73,7 +78,12 @@ namespace YoloDotNet.Extensions
             var srcRect = new SKRect(0, 0, width, height);
             var dstRect = new SKRect(x, y, x + newWidth, y + newHeight);
 
-            pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, samplingOptions);
+            var paint = new SKPaint
+            {
+                FilterQuality = filterQuality
+            };
+
+            pinnedMemoryBuffer.Canvas.DrawImage(image, srcRect, dstRect, paint);
 
             // Return the original image dimensions, which are required to correctly scale bounding boxes
             return new SKSizeI(width, height);

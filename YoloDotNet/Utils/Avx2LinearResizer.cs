@@ -29,8 +29,8 @@ namespace YoloDotNet.Utils
             int dstW = dst.Width;
             int dstH = dst.Height;
 
-            Span<byte> srcSpan = src.GetPixelSpan();
-            Span<byte> dstSpan = dst.GetPixelSpan();
+            ReadOnlySpan<byte> srcSpan = src.GetPixelSpan();
+            ReadOnlySpan<byte> dstSpan = dst.GetPixelSpan();
 
             int srcStride = src.RowBytes;
             int dstStride = dst.RowBytes;

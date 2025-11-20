@@ -2,6 +2,8 @@
 // Copyright (c) 2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using SkiaSharp;
+
 namespace YoloDotNet.Models
 {
     /// <summary>
@@ -33,12 +35,8 @@ namespace YoloDotNet.Models
         /// SkiaSharp sampling options optimized for efficient downscaling.
         /// </summary>
         /// <remarks>
-        /// - **Default:** Linear filtering (`SKFilterMode.Linear`) with no mipmap interpolation (`SKMipmapMode.None`).
-        /// - **Performance:** Fast and efficient for downscaling.
-        /// - **Quality:** Produces smooth results with minimal aliasing.
-        /// - **Best Use Case:** Ideal when reducing image size while maintaining a balance between speed and quality.
         /// - **Modifiability:** This property can be changed at runtime to adjust filtering behavior.
         /// </remarks>
-        public SKSamplingOptions SamplingOptions { get; set; } = ImageConfig.DefaultSamplingOptions;
+        public SKFilterQuality FilterQuality { get; set; } = SKFilterQuality.Low;
     }
 }

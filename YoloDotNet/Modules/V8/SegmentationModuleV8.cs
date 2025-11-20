@@ -146,7 +146,7 @@ namespace YoloDotNet.Modules.V8
                     Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
                 else
 #endif
-                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationResamplingOptions);
+                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
 
                 // 5) Pack to compact bit array (threshold = pixelConfidence)
                 box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
@@ -191,7 +191,7 @@ namespace YoloDotNet.Modules.V8
                 if (Avx2.IsSupported)
                     Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
                 else
-                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationResamplingOptions);
+                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
 
                 // 5) Pack the upscaled pixel mask into a compact bit array (1 bit per pixel)
                 // for cleaner, memory-efficient storage of the mask in the detection box.
