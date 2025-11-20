@@ -29,6 +29,8 @@ Segmentation inference just got leaner and meaner — CPU inference is up to 11%
 OrtEnv fix in 3.1.1:
 Reusing or recreating YoloDotNet objects? No more "OrtEnv singleton instance already exists" drama.</PackageReleaseNotes>
     <Copyright>Copyright © 2023 Nick Swardh</Copyright>
+
+	<BaseOutputPath>..\..\..\lib\</BaseOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
