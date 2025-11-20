@@ -385,6 +385,8 @@ namespace YoloDotNet.Core
             if (_isDisposed)
                 return;
 
+            _isDisposed = true;
+
             _session?.Dispose();
             _ortIoBinding?.Dispose();
             _runOptions?.Dispose();
