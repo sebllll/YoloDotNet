@@ -204,7 +204,7 @@ namespace YoloDotNet.Extensions
             // Create a paint object for measuring text (SKFont.MeasureText doesn't accept string in 2.88.6)
             using var measurePaint = new SKPaint
             {
-                Typeface = options.Font,
+                Typeface = options?.Font ?? SKTypeface.Default,
                 TextSize = fontSize,
                 IsAntialias = true
             };
