@@ -69,6 +69,9 @@ namespace YoloDotNet
         public List<ObjectDetection> RunObjectDetection(SKImage img, double confidence = 0.2, double iou = 0.7)
              => ((IObjectDetectionModule)_detection).ProcessImage(img, confidence, 0, iou);
 
+        public List<ObjectDetection> RunObjectDetection(byte[] imageData, int width, int height, double confidence = 0.2, double iou = 0.7)
+             => ((IObjectDetectionModule)_detection).ProcessImageData(imageData, width, height, confidence, 0, iou);
+
         #endregion
 
         #region OBB (Oriented Bounding Box)

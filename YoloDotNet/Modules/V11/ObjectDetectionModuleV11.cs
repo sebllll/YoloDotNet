@@ -22,6 +22,9 @@ namespace YoloDotNet.Modules.V11
         public List<ObjectDetection> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
             => _objectDetectionModuleV8.ProcessImage(image, confidence, pixelConfidence, iou);
 
+        public List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => _objectDetectionModuleV8.ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou);
+
         public void Dispose()
         {
             _objectDetectionModuleV8?.Dispose();

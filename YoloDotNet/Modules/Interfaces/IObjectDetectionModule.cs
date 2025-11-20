@@ -7,5 +7,7 @@ namespace YoloDotNet.Modules.Interfaces
     public interface IObjectDetectionModule : IModule
     {
         List<ObjectDetection> ProcessImage<T>(T image, double confidence, double pixelConfidence,double iou);
+
+        List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou);
     }
 }

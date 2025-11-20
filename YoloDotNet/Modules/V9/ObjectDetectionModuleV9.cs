@@ -2,6 +2,8 @@
 // Copyright (c) 2023-2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using YoloDotNet.Modules.V8;
+
 namespace YoloDotNet.Modules.V9
 {
     internal class ObjectDetectionModuleV9 : IObjectDetectionModule
@@ -21,6 +23,9 @@ namespace YoloDotNet.Modules.V9
 
         public List<ObjectDetection> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
             => _objectDetectionModule.ProcessImage(image, confidence, pixelConfidence, iou);
+
+        public List<ObjectDetection> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou)
+            => _objectDetectionModule.ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou);
 
         public void Dispose()
         {
