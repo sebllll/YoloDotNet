@@ -6,6 +6,7 @@ namespace YoloDotNet.Modules.V8
 {
     internal class SegmentationModuleV8 : ISegmentationModule
     {
+        private readonly object _lock = new();
         private YoloCore _yoloCore = default!;
         private ObjectDetectionModuleV8 _objectDetectionModule = default!;
         private float _scalingFactorW;
@@ -57,128 +58,136 @@ namespace YoloDotNet.Modules.V8
 
         public List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou)
         {
-            var (ortValues, imageSize) = _yoloCore.Run(image);
+            lock (_lock)
+            {
+                var (ortValues, imageSize) = _yoloCore.Run(image);
 
-            return RunSegmentation(imageSize, ortValues, confidence, pixelConfidence, iou);
+                return RunSegmentation(imageSize, ortValues, confidence, pixelConfidence, iou);
+            }
         }
 
         public List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter, int maxBoundingBoxesToProcess = 250)
         {
-            try
+            lock (_lock)
             {
-                if (imageData is null || imageData.Length == 0 || width <= 0 || height <= 0)
+                try
                 {
-                    return [];
-                }
-
-                using var ortValues = _yoloCore.Run(imageData, width, height);
-                var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
-                var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
-
-                var imageSize = new SKSizeI(width, height);
-                var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
-
-                if (labelIndex != -1)
-                {
-                    boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
-                }
-
-                if (bboxFilter is not null)
-                {
-                    boundingBoxes = [.. boundingBoxes.Where(bboxFilter)];
-                }
-
-                // Safeguard against an excessive number of bounding boxes to prevent memory overflow.
-                if (maxBoundingBoxesToProcess > 0 && boundingBoxes.Length > maxBoundingBoxesToProcess)
-                {
-                    boundingBoxes = boundingBoxes[..maxBoundingBoxesToProcess];
-                }
-
-                foreach (var box in boundingBoxes)
-                {
-                    try
+                    if (imageData is null || imageData.Length == 0 || width <= 0 || height <= 0)
                     {
-                        // Guard against processing bounding boxes with zero or negative dimensions.
-                        if (box.BoundingBox.Width <= 0 || box.BoundingBox.Height <= 0)
+                        return [];
+                    }
+
+                    using var ortValues = _yoloCore.Run(imageData, width, height);
+                    var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
+                    var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
+
+                    var imageSize = new SKSizeI(width, height);
+                    var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
+
+                    if (labelIndex != -1)
+                    {
+                        boundingBoxes = [.. boundingBoxes.Where(box => box.Label.Index == labelIndex)];
+                    }
+
+
+
+                    if (bboxFilter is not null)
+                    {
+                        boundingBoxes = [.. boundingBoxes.Where(bboxFilter)];
+                    }
+
+                    // Safeguard against an excessive number of bounding boxes to prevent memory overflow.
+                    if (maxBoundingBoxesToProcess > 0 && boundingBoxes.Length > maxBoundingBoxesToProcess)
+                    {
+                        boundingBoxes = boundingBoxes[..maxBoundingBoxesToProcess];
+                    }
+
+                    foreach (var box in boundingBoxes)
+                    {
+                        try
                         {
-                            continue;
-                        }
+                            // Guard against processing bounding boxes with zero or negative dimensions.
+                            if (box.BoundingBox.Width <= 0 || box.BoundingBox.Height <= 0)
+                            {
+                                continue;
+                            }
 
-                        // Compute the final unscaled bbox used for mask evaluation (optional scaling), then clamp to image bounds
-                        var unscaled = box.BoundingBoxUnscaled;
-                        if (cropToBB && scaleBB != 1.0)
-                        {
-                            float cx = unscaled.MidX;
-                            float cy = unscaled.MidY;
-                            float nw = unscaled.Width * (float)scaleBB;
-                            float nh = unscaled.Height * (float)scaleBB;
-                            unscaled = new SKRect(cx - nw / 2, cy - nh / 2, cx + nw / 2, cy + nh / 2);
-                        }
+                            // Compute the final unscaled bbox used for mask evaluation (optional scaling), then clamp to image bounds
+                            var unscaled = box.BoundingBoxUnscaled;
+                            if (cropToBB && scaleBB != 1.0)
+                            {
+                                float cx = unscaled.MidX;
+                                float cy = unscaled.MidY;
+                                float nw = unscaled.Width * (float)scaleBB;
+                                float nh = unscaled.Height * (float)scaleBB;
+                                unscaled = new SKRect(cx - nw / 2, cy - nh / 2, cx + nw / 2, cy + nh / 2);
+                            }
 
-                        // Clamp to image extents (integer rect)
-                        int left = Math.Clamp((int)Math.Floor(unscaled.Left), 0, width - 1);
-                        int top = Math.Clamp((int)Math.Floor(unscaled.Top), 0, height - 1);
-                        int right = Math.Clamp((int)Math.Ceiling(unscaled.Right), 0, width - 1);
-                        int bottom = Math.Clamp((int)Math.Ceiling(unscaled.Bottom), 0, height - 1);
+                            // Clamp to image extents (integer rect)
+                            int left = Math.Clamp((int)Math.Floor(unscaled.Left), 0, width - 1);
+                            int top = Math.Clamp((int)Math.Floor(unscaled.Top), 0, height - 1);
+                            int right = Math.Clamp((int)Math.Ceiling(unscaled.Right), 0, width - 1);
+                            int bottom = Math.Clamp((int)Math.Ceiling(unscaled.Bottom), 0, height - 1);
 
-                        // Guard against degenerate rects
-                        if (right < left) right = left;
-                        if (bottom < top) bottom = top;
+                            // Guard against degenerate rects
+                            if (right < left) right = left;
+                            if (bottom < top) bottom = top;
 
-                        var finalBox = new SKRectI(left, top, right, bottom);
+                            var finalBox = new SKRectI(left, top, right, bottom);
 
-                        // Guard against processing bounding boxes with zero or negative dimensions.
-                        if (finalBox.Width <= 0 || finalBox.Height <= 0)
-                        {
-                            continue;
-                        }
+                            // Guard against processing bounding boxes with zero or negative dimensions.
+                            if (finalBox.Width <= 0 || finalBox.Height <= 0)
+                            {
+                                continue;
+                            }
 
-                        // This rect is used to crop from the segmentation output
-                        var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(new SKRect(left, top, right, bottom));
+                            // This rect is used to crop from the segmentation output
+                            var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(new SKRect(left, top, right, bottom));
 
-                        // 1) Get weights from output0
-                        var maskWeights = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
+                            // 1) Get weights from output0
+                            var maskWeights = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
 
-                        // 2) Apply pixel mask to canvas limited to the (possibly scaled) bbox
-                        using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
-                        ApplySegmentationPixelMask(pixelMaskBitmap, new SKRect(left, top, right, bottom), ortSpan1, maskWeights);
+                            // 2) Apply pixel mask to canvas limited to the (possibly scaled) bbox
+                            using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
+                            ApplySegmentationPixelMask(pixelMaskBitmap, new SKRect(left, top, right, bottom), ortSpan1, maskWeights);
 
-                        // 3) Crop the (downscaled) bbox region from the canvas
-                        using var cropped = new SKBitmap();
-                        pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
+                            // 3) Crop the (downscaled) bbox region from the canvas
+                            using var cropped = new SKBitmap();
+                            pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
 
-                        // 4) Upscale cropped pixel mask to the final bbox size (ensures packed mask aligns with finalBox)
-                        var pixelMaskInfo = new SKImageInfo(finalBox.Width, finalBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
-                        using var resizedCrop = new SKBitmap(pixelMaskInfo);
+                            // 4) Upscale cropped pixel mask to the final bbox size (ensures packed mask aligns with finalBox)
+                            var pixelMaskInfo = new SKImageInfo(finalBox.Width, finalBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
+                            using var resizedCrop = new SKBitmap(pixelMaskInfo);
 #if NET8_0_OR_GREATER
-                        if (Avx2.IsSupported)
-                            Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
-                        else
+                            if (Avx2.IsSupported)
+                                Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
+                            else
 #endif
-                            cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
+                                cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
 
-                        // 5) Pack to compact bit array (threshold = pixelConfidence)
-                        box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
+                            // 5) Pack to compact bit array (threshold = pixelConfidence)
+                            box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
 
-                        // Ensure the returned Segmentation reflects the transformed bbox
-                        box.BoundingBox = finalBox;
+                            // Ensure the returned Segmentation reflects the transformed bbox
+                            box.BoundingBox = finalBox;
+                        }
+                        catch (Exception ex)
+                        {
+                            // Wrap the original exception with more context about the object that failed.
+                            throw new YoloDotNetException($"Failed during mask processing for label '{box?.Label?.Name ?? "N/A"}' with confidence {box?.Confidence:P2}. See inner exception for details.", ex);
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        // Wrap the original exception with more context about the object that failed.
-                        throw new YoloDotNetException($"Failed during mask processing for label '{box?.Label?.Name ?? "N/A"}' with confidence {box?.Confidence:P2}. See inner exception for details.", ex);
-                    }
+
+                    ortValues[0]?.Dispose();
+                    ortValues[1]?.Dispose();
+
+                    return [.. boundingBoxes.Select(x => (Segmentation)x)];
                 }
-
-                ortValues[0]?.Dispose();
-                ortValues[1]?.Dispose();
-
-                return [.. boundingBoxes.Select(x => (Segmentation)x)];
-            }
-            catch (Exception ex)
-            {
-                // Catch exceptions from the entire method, especially from Run() or ObjectDetection().
-                throw new YoloDotNetException($"Failed during {nameof(ProcessImageData)} for image size {width}x{height}. See inner exception for details.", ex);
+                catch (Exception ex)
+                {
+                    // Catch exceptions from the entire method, especially from Run() or ObjectDetection().
+                    throw new YoloDotNetException($"Failed during {nameof(ProcessImageData)} for image size {width}x{height}. See inner exception for details.", ex);
+                }
             }
         }
 
@@ -331,12 +340,15 @@ namespace YoloDotNet.Modules.V8
 
         public void Reset()
         {
-            var options = _yoloCore.YoloOptions;
+            lock (_lock)
+            {
+                var options = _yoloCore.YoloOptions;
 
-            _objectDetectionModule?.Dispose();
-            _yoloCore?.Dispose();
+                _objectDetectionModule?.Dispose();
+                _yoloCore?.Dispose();
 
-            Initialize(new YoloCore(options));
+                Initialize(new YoloCore(options));
+            }
         }
 
         public void Dispose()
