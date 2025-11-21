@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Linq;
 using Stride.Graphics;
@@ -24,7 +25,8 @@ namespace YoloDotNet.Utils
             bool useSegmentationColor = true,
             bool confidenceToAlpha = false,
             int outputTexWidth = 0,
-            int outputTexHeight = 0)
+            int outputTexHeight = 0,
+            int maxBoundingBoxesToProcess = 0)
         {
             segmentations ??= Enumerable.Empty<Segmentation>();
 
@@ -39,7 +41,11 @@ namespace YoloDotNet.Utils
             using var buffer = MemoryOwner<byte>.Allocate(outW * outH * bpp, AllocationMode.Clear);
             var dst = buffer.Span;
 
-            foreach (var seg in segmentations)
+            var segmentationsToProcess = maxBoundingBoxesToProcess > 0
+                ? segmentations.Take(maxBoundingBoxesToProcess)
+                : segmentations;
+
+            foreach (var seg in segmentationsToProcess)
             {
                 if (seg?.BitPackedPixelMask is null || seg.BitPackedPixelMask.Length == 0)
                     continue;
@@ -87,42 +93,56 @@ namespace YoloDotNet.Utils
                     bPremul = (byte)(b * aByte);
                 }
 
-                // Unpack the bit-packed mask to a byte array (0 or 255 per pixel)
-                var unpackedMask = seg.BitPackedPixelMask.UnpackPixelMaskToByteArray(bw, bh);
-
-                for (int ty = top; ty < bottom; ty++)
+                // Rent a buffer from the pool for the unpacked mask
+                int unpackedMaskSize = bw * bh;
+                byte[]? rentedMask = null;
+                try
                 {
-                    int yMask = startYInMask + (ty - top);
-                    int baseDst = ty * outW + left;
+                    rentedMask = ArrayPool<byte>.Shared.Rent(unpackedMaskSize);
+                    var unpackedMask = rentedMask.AsSpan(0, unpackedMaskSize);
 
-                    for (int tx = left; tx < right; tx++)
+                    // Unpack the bit-packed mask to the rented buffer
+                    seg.BitPackedPixelMask.UnpackPixelMaskToSpan(unpackedMask, bw, bh);
+
+                    for (int ty = top; ty < bottom; ty++)
                     {
-                        int xMask = startXInMask + (tx - left);
-                        int maskIdx = yMask * bw + xMask;
+                        int yMask = startYInMask + (ty - top);
+                        int baseDst = ty * outW + left;
 
-                        // Skip if pixel is not set in mask
-                        if (unpackedMask[maskIdx] == 0)
-                            continue;
-
-                        int destIndex = (baseDst + (tx - left)) * bpp;
-
-                        if (doRGB)
+                        for (int tx = left; tx < right; tx++)
                         {
-                            // Max alpha: overwrite only if higher alpha (binary uniform aByte so single compare)
-                            if (aByte > dst[destIndex + 3])
+                            int xMask = startXInMask + (tx - left);
+                            int maskIdx = yMask * bw + xMask;
+
+                            // Skip if pixel is not set in mask
+                            if (unpackedMask[maskIdx] == 0)
+                                continue;
+
+                            int destIndex = (baseDst + (tx - left)) * bpp;
+
+                            if (doRGB)
                             {
-                                dst[destIndex + 0] = rPremul;
-                                dst[destIndex + 1] = gPremul;
-                                dst[destIndex + 2] = bPremul;
-                                dst[destIndex + 3] = aByte;
+                                // Max alpha: overwrite only if higher alpha (binary uniform aByte so single compare)
+                                if (aByte > dst[destIndex + 3])
+                                {
+                                    dst[destIndex + 0] = rPremul;
+                                    dst[destIndex + 1] = gPremul;
+                                    dst[destIndex + 2] = bPremul;
+                                    dst[destIndex + 3] = aByte;
+                                }
+                            }
+                            else
+                            {
+                                if (aByte > dst[destIndex])
+                                    dst[destIndex] = aByte;
                             }
                         }
-                        else
-                        {
-                            if (aByte > dst[destIndex])
-                                dst[destIndex] = aByte;
-                        }
                     }
+                }
+                finally
+                {
+                    if (rentedMask is not null)
+                        ArrayPool<byte>.Shared.Return(rentedMask);
                 }
             }
 
