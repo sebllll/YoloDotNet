@@ -13,6 +13,7 @@ namespace YoloDotNet.Handlers
         public readonly SKCanvas Canvas;
 
         private readonly GCHandle _handle;
+        private bool _disposed;
 
         public PinnedMemoryBuffer(SKImageInfo imageInfo)
         {
@@ -35,13 +36,32 @@ namespace YoloDotNet.Handlers
 
         public void Dispose()
         {
-            Canvas?.Dispose();
-            TargetBitmap?.Dispose();
+            Dispose(true);
+            GC.SuppressFinalize(this);
+        }
 
+        protected virtual void Dispose(bool disposing)
+        {
+            if (_disposed)
+                return;
+
+            if (disposing)
+            {
+                // Dispose managed state (managed objects).
+                Canvas?.Dispose();
+                TargetBitmap?.Dispose();
+            }
+
+            // Free unmanaged resources (unmanaged objects) and override finalizer
             if (_handle.IsAllocated)
                 _handle.Free();
 
-            GC.SuppressFinalize(this);
+            _disposed = true;
+        }
+
+        ~PinnedMemoryBuffer()
+        {
+            Dispose(false);
         }
     }
 }
