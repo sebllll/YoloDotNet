@@ -47,102 +47,110 @@ namespace YoloDotNet.Utils
 
             foreach (var seg in segmentationsToProcess)
             {
-                if (seg?.BitPackedPixelMask is null || seg.BitPackedPixelMask.Length == 0)
-                    continue;
-
-                var bbox = seg.BoundingBox;
-                int bw = bbox.Width;
-                int bh = bbox.Height;
-                if (bw <= 0 || bh <= 0)
-                    continue;
-
-                // Clip to output
-                int left = Math.Max(0, bbox.Left);
-                int top = Math.Max(0, bbox.Top);
-                int right = Math.Min(outW, bbox.Right);
-                int bottom = Math.Min(outH, bbox.Bottom);
-                if (left >= right || top >= bottom)
-                    continue;
-
-                int startXInMask = Math.Max(0, -bbox.Left);
-                int startYInMask = Math.Max(0, -bbox.Top);
-
-                var chosen = useSegmentationColor ? seg.Color : tint;
-                if (chosen == default)
-                    chosen = new Color4(1f, 1f, 1f, 1f);
-
-                float aBase = Math.Clamp(chosen.A, 0f, 1f);
-                if (aBase <= 0f)
-                    continue;
-
-                float segConf = confidenceToAlpha ? (float)Math.Clamp(seg.Confidence, 0.0, 1.0) : 1f;
-                float alphaFactor = aBase * segConf;
-                if (alphaFactor <= 0f)
-                    continue;
-
-                byte aByte = (byte)(alphaFactor * 255f);
-
-                byte rPremul = 0, gPremul = 0, bPremul = 0;
-                if (doRGB)
-                {
-                    float r = Math.Clamp(chosen.R, 0f, 1f);
-                    float g = Math.Clamp(chosen.G, 0f, 1f);
-                    float b = Math.Clamp(chosen.B, 0f, 1f);
-                    rPremul = (byte)(r * aByte);
-                    gPremul = (byte)(g * aByte);
-                    bPremul = (byte)(b * aByte);
-                }
-
-                // Rent a buffer from the pool for the unpacked mask
-                int unpackedMaskSize = bw * bh;
-                byte[]? rentedMask = null;
                 try
                 {
-                    rentedMask = ArrayPool<byte>.Shared.Rent(unpackedMaskSize);
-                    var unpackedMask = rentedMask.AsSpan(0, unpackedMaskSize);
+                    if (seg?.BitPackedPixelMask is null || seg.BitPackedPixelMask.Length == 0)
+                        continue;
 
-                    // Unpack the bit-packed mask to the rented buffer
-                    seg.BitPackedPixelMask.UnpackPixelMaskToSpan(unpackedMask, bw, bh);
+                    var bbox = seg.BoundingBox;
+                    int bw = bbox.Width;
+                    int bh = bbox.Height;
+                    if (bw <= 0 || bh <= 0)
+                        continue;
 
-                    for (int ty = top; ty < bottom; ty++)
+                    // Clip to output
+                    int left = Math.Max(0, bbox.Left);
+                    int top = Math.Max(0, bbox.Top);
+                    int right = Math.Min(outW, bbox.Right);
+                    int bottom = Math.Min(outH, bbox.Bottom);
+                    if (left >= right || top >= bottom)
+                        continue;
+
+                    int startXInMask = Math.Max(0, -bbox.Left);
+                    int startYInMask = Math.Max(0, -bbox.Top);
+
+                    var chosen = useSegmentationColor ? seg.Color : tint;
+                    if (chosen == default)
+                        chosen = new Color4(1f, 1f, 1f, 1f);
+
+                    float aBase = Math.Clamp(chosen.A, 0f, 1f);
+                    if (aBase <= 0f)
+                        continue;
+
+                    float segConf = confidenceToAlpha ? (float)Math.Clamp(seg.Confidence, 0.0, 1.0) : 1f;
+                    float alphaFactor = aBase * segConf;
+                    if (alphaFactor <= 0f)
+                        continue;
+
+                    byte aByte = (byte)(alphaFactor * 255f);
+
+                    byte rPremul = 0, gPremul = 0, bPremul = 0;
+                    if (doRGB)
                     {
-                        int yMask = startYInMask + (ty - top);
-                        int baseDst = ty * outW + left;
+                        float r = Math.Clamp(chosen.R, 0f, 1f);
+                        float g = Math.Clamp(chosen.G, 0f, 1f);
+                        float b = Math.Clamp(chosen.B, 0f, 1f);
+                        rPremul = (byte)(r * aByte);
+                        gPremul = (byte)(g * aByte);
+                        bPremul = (byte)(b * aByte);
+                    }
 
-                        for (int tx = left; tx < right; tx++)
+                    // Rent a buffer from the pool for the unpacked mask
+                    int unpackedMaskSize = bw * bh;
+                    byte[]? rentedMask = null;
+                    try
+                    {
+                        rentedMask = ArrayPool<byte>.Shared.Rent(unpackedMaskSize);
+                        var unpackedMask = rentedMask.AsSpan(0, unpackedMaskSize);
+
+                        // Unpack the bit-packed mask to the rented buffer
+                        seg.BitPackedPixelMask.UnpackPixelMaskToSpan(unpackedMask, bw, bh);
+
+                        for (int ty = top; ty < bottom; ty++)
                         {
-                            int xMask = startXInMask + (tx - left);
-                            int maskIdx = yMask * bw + xMask;
+                            int yMask = startYInMask + (ty - top);
+                            int baseDst = ty * outW + left;
 
-                            // Skip if pixel is not set in mask
-                            if (unpackedMask[maskIdx] == 0)
-                                continue;
-
-                            int destIndex = (baseDst + (tx - left)) * bpp;
-
-                            if (doRGB)
+                            for (int tx = left; tx < right; tx++)
                             {
-                                // Max alpha: overwrite only if higher alpha (binary uniform aByte so single compare)
-                                if (aByte > dst[destIndex + 3])
+                                int xMask = startXInMask + (tx - left);
+                                int maskIdx = yMask * bw + xMask;
+
+                                // Skip if pixel is not set in mask
+                                if (unpackedMask[maskIdx] == 0)
+                                    continue;
+
+                                int destIndex = (baseDst + (tx - left)) * bpp;
+
+                                if (doRGB)
                                 {
-                                    dst[destIndex + 0] = rPremul;
-                                    dst[destIndex + 1] = gPremul;
-                                    dst[destIndex + 2] = bPremul;
-                                    dst[destIndex + 3] = aByte;
+                                    // Max alpha: overwrite only if higher alpha (binary uniform aByte so single compare)
+                                    if (aByte > dst[destIndex + 3])
+                                    {
+                                        dst[destIndex + 0] = rPremul;
+                                        dst[destIndex + 1] = gPremul;
+                                        dst[destIndex + 2] = bPremul;
+                                        dst[destIndex + 3] = aByte;
+                                    }
                                 }
-                            }
-                            else
-                            {
-                                if (aByte > dst[destIndex])
-                                    dst[destIndex] = aByte;
+                                else
+                                {
+                                    if (aByte > dst[destIndex])
+                                        dst[destIndex] = aByte;
+                                }
                             }
                         }
                     }
+                    finally
+                    {
+                        if (rentedMask is not null)
+                            ArrayPool<byte>.Shared.Return(rentedMask);
+                    }
                 }
-                finally
+                catch (Exception ex)
                 {
-                    if (rentedMask is not null)
-                        ArrayPool<byte>.Shared.Return(rentedMask);
+                    // Wrap the original exception with more context about the segmentation object that failed.
+                    throw new YoloDotNetException($"Failed to process segmentation for label '{seg?.Label?.Name ?? "N/A"}' with confidence {seg?.Confidence:P2}. See inner exception for details.", ex);
                 }
             }
 
