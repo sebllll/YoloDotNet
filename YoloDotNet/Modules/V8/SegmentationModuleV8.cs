@@ -193,47 +193,52 @@ namespace YoloDotNet.Modules.V8
 
         private List<Segmentation> RunSegmentation(SKSizeI imageSize, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
         {
-            var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
-            var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
-
-            var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
-
-            foreach (var box in boundingBoxes)
+            try
             {
-                var pixelMaskInfo = new SKImageInfo(box.BoundingBox.Width, box.BoundingBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
-                var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(box.BoundingBoxUnscaled);
+                var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
+                var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
 
-                // 1) Get weights
-                var maskWeights = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
+                var boundingBoxes = _objectDetectionModule.ObjectDetection(imageSize, ortSpan0, confidence, iou);
 
-                // 2) Apply pixelmask based on mask-weights to canvas
-                using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
-                ApplySegmentationPixelMask(pixelMaskBitmap, box.BoundingBoxUnscaled, ortSpan1, maskWeights);
+                foreach (var box in boundingBoxes)
+                {
+                    var pixelMaskInfo = new SKImageInfo(box.BoundingBox.Width, box.BoundingBox.Height, SKColorType.Gray8, SKAlphaType.Opaque);
+                    var downScaledBoundingBox = DownscaleBoundingBoxToSegmentationOutput(box.BoundingBoxUnscaled);
 
-                // 3) Crop downscaled boundingbox from the pixelmask canvas
-                using var cropped = new SKBitmap();
-                pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
+                    // 1) Get weights
+                    var maskWeights = GetMaskWeightsFromBoundingBoxArea(box, ortSpan0);
 
-                // 4) Upscale cropped pixelmask to original boundingbox size. For smother edges, use an appropriate resampling method!
-                using var resizedCrop = new SKBitmap(pixelMaskInfo);
+                    // 2) Apply pixelmask based on mask-weights to canvas
+                    using var pixelMaskBitmap = new SKBitmap(_maskWidth, _maskHeight, SKColorType.Gray8, SKAlphaType.Opaque);
+                    ApplySegmentationPixelMask(pixelMaskBitmap, box.BoundingBoxUnscaled, ortSpan1, maskWeights);
 
-                // Use AVX2-optimized upscaling if supported; otherwise, fall back to SkiaSharp's ScalePixels.
-                if (Avx2.IsSupported)
-                    Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
-                else
-                    cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
+                    // 3) Crop downscaled boundingbox from the pixelmask canvas
+                    using var cropped = new SKBitmap();
+                    pixelMaskBitmap.ExtractSubset(cropped, downScaledBoundingBox);
 
-                // 5) Pack the upscaled pixel mask into a compact bit array (1 bit per pixel)
-                // for cleaner, memory-efficient storage of the mask in the detection box.
-                box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
+                    // 4) Upscale cropped pixelmask to original boundingbox size. For smother edges, use an appropriate resampling method!
+                    using var resizedCrop = new SKBitmap(pixelMaskInfo);
+
+                    // Use AVX2-optimized upscaling if supported; otherwise, fall back to SkiaSharp's ScalePixels.
+                    if (Avx2.IsSupported)
+                        Avx2LinearResizer.ScalePixels(cropped, resizedCrop);
+                    else
+                        cropped.ScalePixels(resizedCrop, ImageConfig.SegmentationFilterQuality);
+
+                    // 5) Pack the upscaled pixel mask into a compact bit array (1 bit per pixel)
+                    // for cleaner, memory-efficient storage of the mask in the detection box.
+                    box.BitPackedPixelMask = PackUpscaledMaskToBitArray(resizedCrop, pixelConfidence);
+                }
+
+                return [.. boundingBoxes.Select(x => (Segmentation)x)];
             }
-
-            // Clean up
-            ortValues[0]?.Dispose();
-            ortValues[1]?.Dispose();
-            ortValues?.Dispose();
-
-            return [.. boundingBoxes.Select(x => (Segmentation)x)];
+            finally
+            {
+                // Clean up
+                ortValues[0]?.Dispose();
+                ortValues[1]?.Dispose();
+                ortValues?.Dispose();
+            }
         }
 
         private MaskWeights32 GetMaskWeightsFromBoundingBoxArea(ObjectResult box, ReadOnlySpan<float> ortSpan0)
