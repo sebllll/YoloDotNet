@@ -13,6 +13,11 @@ namespace YoloDotNet.Modules.V11E
 
         public SegmentationModuleV11E(YoloCore yoloCore)
         {
+            if (yoloCore.OnnxModel.ModelType is not ModelType.Segmentation)
+            {
+                throw new YoloDotNetException("YOLOv11-E only supports segmentation models.");
+            }
+
             _yoloCore = yoloCore;
 
             // YOLOv11E uses the YOLOv8 model architecture
@@ -24,6 +29,11 @@ namespace YoloDotNet.Modules.V11E
 
         public List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter, int maxBoundingBoxesToProcess = 250)
             => _segmentationModuleV8.ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter, maxBoundingBoxesToProcess);
+
+        public void Reset()
+        {
+            _segmentationModuleV8.Reset();
+        }
 
         #region Helper methods
 

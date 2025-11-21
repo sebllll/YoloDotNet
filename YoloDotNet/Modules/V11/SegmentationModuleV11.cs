@@ -25,6 +25,11 @@ namespace YoloDotNet.Modules.V11
         public List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter, int maxBoundingBoxesToProcess = 250)
             => _segmentationModuleV8.ProcessImageData(imageData, width, height, confidence, pixelConfidence, iou, labelIndex, cropToBB, scaleBB, bboxFilter, maxBoundingBoxesToProcess);
 
+        public void Reset()
+        {
+            _segmentationModuleV8.Reset();
+        }
+
         #region Helper methods
 
         public void Dispose()

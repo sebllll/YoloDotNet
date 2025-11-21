@@ -231,6 +231,22 @@ namespace YoloDotNet
 
         #region Dispose
 
+        /// <summary>
+        /// Resets the underlying inference engine to release memory and re-initialize the state.
+        /// This can be useful to clear memory from a potential leak in a native dependency.
+        /// </summary>
+        public void Reset()
+        {
+            if (_detection is ISegmentationModule segmentationModule)
+            {
+                segmentationModule.Reset();
+            }
+            else
+            {
+                throw new NotSupportedException("Reset is only supported for segmentation modules.");
+            }
+        }
+
         public void Dispose()
         {
             _detection.Dispose();

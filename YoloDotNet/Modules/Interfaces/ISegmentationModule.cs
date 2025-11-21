@@ -7,6 +7,12 @@ namespace YoloDotNet.Modules.Interfaces
     public interface ISegmentationModule : IModule
     {
         List<Segmentation> ProcessImage<T>(T image, double confidence, double pixelConfidence, double iou);
+
         List<Segmentation> ProcessImageData(byte[] imageData, int width, int height, double confidence, double pixelConfidence, double iou, int labelIndex, bool cropToBB, double scaleBB, Func<ObjectResult, bool>? bboxFilter, int maxBoundingBoxesToProcess = 250);
+
+        /// <summary>
+        /// Resets the underlying inference engine to release memory and re-initialize the state.
+        /// </summary>
+        void Reset();
     }
 }

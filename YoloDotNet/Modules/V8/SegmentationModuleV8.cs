@@ -6,15 +6,15 @@ namespace YoloDotNet.Modules.V8
 {
     internal class SegmentationModuleV8 : ISegmentationModule
     {
-        private readonly YoloCore _yoloCore;
-        private readonly ObjectDetectionModuleV8 _objectDetectionModule;
-        private readonly float _scalingFactorW;
-        private readonly float _scalingFactorH;
-        private readonly int _maskWidth;
-        private readonly int _maskHeight;
-        private readonly int _elements;
-        private readonly int _channelsFromOutput0;
-        private readonly int _channelsFromOutput1;
+        private YoloCore _yoloCore = default!;
+        private ObjectDetectionModuleV8 _objectDetectionModule = default!;
+        private float _scalingFactorW;
+        private float _scalingFactorH;
+        private int _maskWidth;
+        private int _maskHeight;
+        private int _elements;
+        private int _channelsFromOutput0;
+        private int _channelsFromOutput1;
 
         public OnnxModel OnnxModel => _yoloCore.OnnxModel;
 
@@ -29,6 +29,11 @@ namespace YoloDotNet.Modules.V8
         }
 
         public SegmentationModuleV8(YoloCore yoloCore)
+        {
+            Initialize(yoloCore);
+        }
+
+        private void Initialize(YoloCore yoloCore)
         {
             _yoloCore = yoloCore;
             _objectDetectionModule = new ObjectDetectionModuleV8(_yoloCore);
@@ -113,7 +118,7 @@ namespace YoloDotNet.Modules.V8
                         // Clamp to image extents (integer rect)
                         int left = Math.Clamp((int)Math.Floor(unscaled.Left), 0, width - 1);
                         int top = Math.Clamp((int)Math.Floor(unscaled.Top), 0, height - 1);
-                        int right = Math Clamp((int)Math.Ceiling(unscaled.Right), 0, width - 1);
+                        int right = Math.Clamp((int)Math.Ceiling(unscaled.Right), 0, width - 1);
                         int bottom = Math.Clamp((int)Math.Ceiling(unscaled.Bottom), 0, height - 1);
 
                         // Guard against degenerate rects
@@ -323,6 +328,16 @@ namespace YoloDotNet.Modules.V8
         }
 
         private static int CalculateBitMaskSize(int totalPixels) => (totalPixels + 7) / 8;
+
+        public void Reset()
+        {
+            var options = _yoloCore.YoloOptions;
+
+            _objectDetectionModule?.Dispose();
+            _yoloCore?.Dispose();
+
+            Initialize(new YoloCore(options));
+        }
 
         public void Dispose()
         {
