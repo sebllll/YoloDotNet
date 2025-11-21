@@ -347,7 +347,10 @@ namespace YoloDotNet.Modules.V8
                 _objectDetectionModule?.Dispose();
                 _yoloCore?.Dispose();
 
-                Initialize(new YoloCore(options));
+                var yoloCore = new YoloCore(options);
+                yoloCore.InitializeYolo();
+
+                Initialize(yoloCore);
             }
         }
 
