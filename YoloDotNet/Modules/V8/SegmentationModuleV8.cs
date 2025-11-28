@@ -60,10 +60,36 @@ namespace YoloDotNet.Modules.V8
         {
             lock (_lock)
             {
-                var (ortValues, imageSize) = _yoloCore.Run(image);
-                using (ortValues)
+                IDisposableReadOnlyCollection<OrtValue>? ortValues = null;
+                try
                 {
+                    var (values, imageSize) = _yoloCore.Run(image);
+                    ortValues = values;
                     return RunSegmentation(imageSize, ortValues, confidence, pixelConfidence, iou);
+                }
+                finally
+                {
+                    // Explicitly dispose each OrtValue to release native ONNX Runtime tensors
+                    if (ortValues != null)
+                    {
+                        try
+                        {
+                            // Dispose individual tensor values first
+                            for (int i = 0; i < ortValues.Count; i++)
+                            {
+                                ortValues[i]?.Dispose();
+                            }
+                        }
+                        catch
+                        {
+                            // Swallow exceptions during cleanup to avoid masking the original exception
+                        }
+                        finally
+                        {
+                            // Then dispose the collection itself
+                            ortValues.Dispose();
+                        }
+                    }
                 }
             }
         }
@@ -72,6 +98,7 @@ namespace YoloDotNet.Modules.V8
         {
             lock (_lock)
             {
+                IDisposableReadOnlyCollection<OrtValue>? ortValues = null;
                 try
                 {
                     if (imageData is null || imageData.Length == 0 || width <= 0 || height <= 0)
@@ -79,7 +106,7 @@ namespace YoloDotNet.Modules.V8
                         return [];
                     }
 
-                    using var ortValues = _yoloCore.Run(imageData, width, height);
+                    ortValues = _yoloCore.Run(imageData, width, height);
                     var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
                     var ortSpan1 = ortValues[1].GetTensorDataAsSpan<float>();
 
@@ -188,9 +215,32 @@ namespace YoloDotNet.Modules.V8
                     // Catch exceptions from the entire method, especially from Run() or ObjectDetection().
                     throw new YoloDotNetException($"Failed during {nameof(ProcessImageData)} for image size {width}x{height}. See inner exception for details.", ex);
                 }
+                finally
+                {
+                    // Explicitly dispose each OrtValue to release native ONNX Runtime tensors
+                    if (ortValues != null)
+                    {
+                        try
+                        {
+                            // Dispose individual tensor values first
+                            for (int i = 0; i < ortValues.Count; i++)
+                            {
+                                ortValues[i]?.Dispose();
+                            }
+                        }
+                        catch
+                        {
+                            // Swallow exceptions during cleanup to avoid masking the original exception
+                        }
+                        finally
+                        {
+                            // Then dispose the collection itself
+                            ortValues.Dispose();
+                        }
+                    }
+                }
             }
         }
-
         private List<Segmentation> RunSegmentation(SKSizeI imageSize, IDisposableReadOnlyCollection<OrtValue> ortValues, double confidence, double pixelConfidence, double iou)
         {
             var ortSpan0 = ortValues[0].GetTensorDataAsSpan<float>();
