@@ -41,6 +41,23 @@ namespace YoloDotNet.Core
         {
             var cudaOptions = new OrtCUDAProviderOptions();
 
+            // Convert enum to ONNX Runtime format (kSameAsRequested, kNextPowerOfTwo)
+            string arenaStrategy = arenaExtendStrategy switch
+            {
+                ArenaExtendStrategy.KSameAsRequested => "kSameAsRequested",
+                ArenaExtendStrategy.KNextPowerOfTwo => "kNextPowerOfTwo",
+                _ => "kNextPowerOfTwo" // Default fallback
+            };
+
+            // Convert enum to ONNX Runtime format (EXHAUSTIVE, HEURISTIC, DEFAULT)
+            string convAlgo = convAlgoSearch switch
+            {
+                ConvAlgoSearch.EXHAUSTIVE => "EXHAUSTIVE",
+                ConvAlgoSearch.HEURISTIC => "HEURISTIC",
+                ConvAlgoSearch.DEFAULT => "DEFAULT",
+                _ => "DEFAULT" // Default fallback
+            };
+
             cudaOptions.UpdateOptions(new Dictionary<string, string>
             {
                 { "device_id", gpuId.ToString() },
@@ -49,17 +66,14 @@ namespace YoloDotNet.Core
                 { "gpu_mem_limit", memorylimit.ToString() },
                 // see https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#c
 
-                //{ "arena_extend_strategy", "kNextPowerOfTwo" },
-                { "arena_extend_strategy", arenaExtendStrategy.ToString() }, 
+                { "arena_extend_strategy", arenaStrategy }, 
                 // Defines how the GPU memory arena grows when more memory is needed.
                 // kSameAsRequested allocates exactly the requested size each time,
-
-                // Controls how the GPU memory arena grows when more memory is needed.
                 // kNextPowerOfTwo doubles the allocation size to the next power of two,
                 // which reduces the frequency of CUDA malloc/free calls and minimizes fragmentation 
                 // in long-running or high-throughput inference scenarios like YOLO object detection.
 
-                { "cudnn_conv_algo_search", convAlgoSearch.ToString() },
+                { "cudnn_conv_algo_search", convAlgo },
                 // Forces cuDNN to benchmark all available convolution algorithms during model initialization
                 // and select the fastest one for the hardware + model combination.
                 // This gives optimal conv kernel performance at runtime, especially beneficial for large or custom conv layers.
