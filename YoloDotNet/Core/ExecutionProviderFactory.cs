@@ -21,7 +21,7 @@ namespace YoloDotNet.Core
                     break;
 
                 case CudaExecutionProvider cudaProvider:
-                    ConfigureCuda(cudaProvider.GpuId, options);
+                    ConfigureCuda(cudaProvider.GpuId, cudaProvider.MemoryLimit, cudaProvider.ArenaExtendStrategy, cudaProvider.ConvAlgoSearch, options);
                     break;
 
                 case TensorRtExecutionProvider trtProvider:
@@ -37,7 +37,7 @@ namespace YoloDotNet.Core
         private static void ConfigureCpu(SessionOptions options)
             => options.EnableCpuMemArena = true;
 
-        private static void ConfigureCuda(int gpuId, SessionOptions options)
+        private static void ConfigureCuda(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch,  SessionOptions options)
         {
             var cudaOptions = new OrtCUDAProviderOptions();
 
@@ -46,13 +46,20 @@ namespace YoloDotNet.Core
                 { "device_id", gpuId.ToString() },
                 // Specifies which GPU device to use (default = 0 if not set).
 
-                { "arena_extend_strategy", "kNextPowerOfTwo" }, 
+                { "gpu_mem_limit", memorylimit.ToString() },
+                // see https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#c
+
+                //{ "arena_extend_strategy", "kNextPowerOfTwo" },
+                { "arena_extend_strategy", arenaExtendStrategy.ToString() }, 
+                // Defines how the GPU memory arena grows when more memory is needed.
+                // kSameAsRequested allocates exactly the requested size each time,
+
                 // Controls how the GPU memory arena grows when more memory is needed.
                 // kNextPowerOfTwo doubles the allocation size to the next power of two,
                 // which reduces the frequency of CUDA malloc/free calls and minimizes fragmentation 
                 // in long-running or high-throughput inference scenarios like YOLO object detection.
 
-                { "cudnn_conv_algo_search", "EXHAUSTIVE" },
+                { "cudnn_conv_algo_search", convAlgoSearch.ToString() },
                 // Forces cuDNN to benchmark all available convolution algorithms during model initialization
                 // and select the fastest one for the hardware + model combination.
                 // This gives optimal conv kernel performance at runtime, especially beneficial for large or custom conv layers.
@@ -60,6 +67,8 @@ namespace YoloDotNet.Core
 
             options.AppendExecutionProvider_CUDA(cudaOptions);
         }
+
+        
 
         private static void ConfigureTensorRT(ITensorRTExecutionProvider provider, SessionOptions options)
         {

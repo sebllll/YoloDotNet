@@ -2,11 +2,32 @@
 // Copyright (c) 2025 Niklas Swärd
 // https://github.com/NickSwardh/YoloDotNet
 
+using static YoloDotNet.Core.ExecutionProviderFactory;
+
 namespace YoloDotNet.Core
 {
     public record CpuExecutionProvider : IExecutionProvider;
 
-    public record CudaExecutionProvider(int GpuId = 0, bool PrimeGpu = false) : IExecutionProvider;
+    public enum ArenaExtendStrategy
+    {
+        KNextPowerOfTwo = 0,
+        KSameAsRequested = 1
+    }
+
+    public enum ConvAlgoSearch
+    {
+        HEURISTIC = 0,
+        EXHAUSTIVE = 1,
+        DEFAULT = 2
+    }
+    public record CudaExecutionProvider
+    (
+        int GpuId = 0,
+        long  MemoryLimit = 2147483648,
+        ArenaExtendStrategy ArenaExtendStrategy = ArenaExtendStrategy.KNextPowerOfTwo,
+        ConvAlgoSearch ConvAlgoSearch = ConvAlgoSearch.EXHAUSTIVE,
+        bool PrimeGpu = false
+    ) : IExecutionProvider;
 
     public record TensorRtExecutionProvider() : ITensorRTExecutionProvider
     {
