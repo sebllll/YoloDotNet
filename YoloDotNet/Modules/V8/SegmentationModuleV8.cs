@@ -61,8 +61,10 @@ namespace YoloDotNet.Modules.V8
             lock (_lock)
             {
                 var (ortValues, imageSize) = _yoloCore.Run(image);
-
-                return RunSegmentation(imageSize, ortValues, confidence, pixelConfidence, iou);
+                using (ortValues)
+                {
+                    return RunSegmentation(imageSize, ortValues, confidence, pixelConfidence, iou);
+                }
             }
         }
 
@@ -178,9 +180,6 @@ namespace YoloDotNet.Modules.V8
                         }
                     }
 
-                    ortValues[0]?.Dispose();
-                    ortValues[1]?.Dispose();
-
                     return [.. boundingBoxes.Select(x => (Segmentation)x)];
                 }
                 catch (Exception ex)
@@ -234,10 +233,9 @@ namespace YoloDotNet.Modules.V8
             }
             finally
             {
-                // Clean up
+                // Clean up the individual OrtValues. The collection itself is handled by the caller.
                 ortValues[0]?.Dispose();
                 ortValues[1]?.Dispose();
-                ortValues?.Dispose();
             }
         }
 
