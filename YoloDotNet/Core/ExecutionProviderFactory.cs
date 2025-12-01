@@ -12,6 +12,12 @@ namespace YoloDotNet.Core
             {
                 GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
                 ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
+                InterOpNumThreads = 1,
+                IntraOpNumThreads = Environment.ProcessorCount,
+
+                EnableMemoryPattern = true,
+                LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE,
+                LogVerbosityLevel = 4,
             };
 
             switch (config)
@@ -21,6 +27,7 @@ namespace YoloDotNet.Core
                     break;
 
                 case CudaExecutionProvider cudaProvider:
+                    options.EnableCpuMemArena = false; 
                     ConfigureCuda(cudaProvider.GpuId, cudaProvider.MemoryLimit, cudaProvider.ArenaExtendStrategy, cudaProvider.ConvAlgoSearch, options);
                     break;
 
@@ -37,7 +44,7 @@ namespace YoloDotNet.Core
         private static void ConfigureCpu(SessionOptions options)
             => options.EnableCpuMemArena = true;
 
-        private static void ConfigureCuda(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch,  SessionOptions options)
+        private static void ConfigureCuda_ood(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch,  SessionOptions options)
         {
             var cudaOptions = new OrtCUDAProviderOptions();
 
@@ -82,8 +89,40 @@ namespace YoloDotNet.Core
             options.AppendExecutionProvider_CUDA(cudaOptions);
         }
 
-        
 
+        private static void ConfigureCuda(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch, SessionOptions options)
+        {
+            // Convert enum to ONNX Runtime format
+            string arenaStrategy = arenaExtendStrategy switch
+            {
+                ArenaExtendStrategy.KSameAsRequested => "kSameAsRequested",
+                ArenaExtendStrategy.KNextPowerOfTwo => "kNextPowerOfTwo",
+                _ => "kSameAsRequested"
+            };
+
+            string convAlgo = convAlgoSearch switch
+            {
+                ConvAlgoSearch.EXHAUSTIVE => "EXHAUSTIVE",
+                ConvAlgoSearch.HEURISTIC => "HEURISTIC",
+                ConvAlgoSearch.DEFAULT => "DEFAULT",
+                _ => "DEFAULT"
+            };
+
+            Console.WriteLine($"[YoloDotNet Config] CUDA arenaExtendStrategy: '{arenaStrategy}'");
+            
+            var cudaOptions = new Dictionary<string, string>
+            {
+                { "device_id", gpuId.ToString() },
+                { "gpu_mem_limit", memorylimit.ToString() },
+                { "arena_extend_strategy", arenaStrategy },
+                { "cudnn_conv_algo_search", convAlgo },
+                { "do_copy_in_default_stream", "1" }
+            };
+
+            // FIX: Nutze die generische Methode "CUDA", anstatt das OrtCUDAProviderOptions Objekt.
+            // Das stellt sicher, dass die Key-Values direkt an die C-API gehen.
+            options.AppendExecutionProvider("CUDA", cudaOptions);
+        }
         private static void ConfigureTensorRT(ITensorRTExecutionProvider provider, SessionOptions options)
         {
             var engineCache = provider.EngineCachePath;
