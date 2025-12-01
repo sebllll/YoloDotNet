@@ -44,7 +44,7 @@ namespace YoloDotNet.Core
         private static void ConfigureCpu(SessionOptions options)
             => options.EnableCpuMemArena = true;
 
-        private static void ConfigureCuda_ood(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch,  SessionOptions options)
+        private static void ConfigureCuda(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch,  SessionOptions options)
         {
             var cudaOptions = new OrtCUDAProviderOptions();
 
@@ -84,13 +84,15 @@ namespace YoloDotNet.Core
                 // Forces cuDNN to benchmark all available convolution algorithms during model initialization
                 // and select the fastest one for the hardware + model combination.
                 // This gives optimal conv kernel performance at runtime, especially beneficial for large or custom conv layers.
+
+                { "do_copy_in_default_stream", "1" }
             });
 
             options.AppendExecutionProvider_CUDA(cudaOptions);
         }
 
 
-        private static void ConfigureCuda(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch, SessionOptions options)
+        private static void ConfigureCuda_Test(int gpuId, long memorylimit, ArenaExtendStrategy arenaExtendStrategy, ConvAlgoSearch convAlgoSearch, SessionOptions options)
         {
             // Convert enum to ONNX Runtime format
             string arenaStrategy = arenaExtendStrategy switch
