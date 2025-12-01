@@ -17,6 +17,8 @@ namespace YoloDotNet.Modules.V8
         private int _channelsFromOutput0;
         private int _channelsFromOutput1;
 
+        private OrtLoggingLevel _loglevel;
+
         public OnnxModel OnnxModel => _yoloCore.OnnxModel;
 
         // Represents a fixed-size float buffer of 32 elements for mask weights.
@@ -393,7 +395,7 @@ namespace YoloDotNet.Modules.V8
                 _yoloCore?.Dispose();
 
                 var yoloCore = new YoloCore(options);
-                yoloCore.InitializeYolo();
+                yoloCore.InitializeYolo(_loglevel);
 
                 Initialize(yoloCore);
             }

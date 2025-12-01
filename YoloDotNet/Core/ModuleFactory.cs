@@ -111,9 +111,9 @@ namespace YoloDotNet.Core
         /// <param name="options">The options for creating the YOLO detection module.</param>
         /// <returns>An instance of the appropriate detection module.</returns>
         /// <exception cref="YoloDotNetModelException">Thrown if the model version or type is unsupported.</exception>
-        public static IModule CreateModule(YoloOptions options)
+        public static IModule CreateModule(YoloOptions options, OrtLoggingLevel loglevel)
         {
-            var yoloCore = InitializeYoloCore(options);
+            var yoloCore = InitializeYoloCore(options, loglevel);
 
             // Get model version and type
             var modelVersion = yoloCore.OnnxModel.ModelVersion;
@@ -134,11 +134,11 @@ namespace YoloDotNet.Core
         /// </summary>
         /// <param name="options">The options for initializing the Yolo model.</param>
         /// <returns>An initialized YoloCore instance.</returns>
-        private static YoloCore InitializeYoloCore(YoloOptions options)
+        private static YoloCore InitializeYoloCore(YoloOptions options, OrtLoggingLevel loglevel)
         {
             //var yoloCore = new YoloCore(options.OnnxModel, options.Cuda, options.PrimeGpu, options.GpuId);
             var yoloCore = new YoloCore(options);
-            yoloCore.InitializeYolo();
+            yoloCore.InitializeYolo(loglevel);
             return yoloCore;
         }
     }

@@ -12,6 +12,8 @@ namespace YoloDotNet.Core
         #region Fields
         private bool _isDisposed;
 
+        private OrtLoggingLevel _logLevel;
+
         private InferenceSession _session = default!;
         private RunOptions _runOptions = default!;
         private OrtIoBinding _ortIoBinding = default!;
@@ -32,12 +34,13 @@ namespace YoloDotNet.Core
         /// <summary>
         /// Initializes the YOLO model with the specified model type.
         /// </summary>
-        public void InitializeYolo()
+        public void InitializeYolo(OrtLoggingLevel loglevel)
         {
+            _logLevel = loglevel;
             if (string.IsNullOrEmpty(YoloOptions.OnnxModel) && YoloOptions.OnnxModelBytes is null)
                 throw new YoloDotNetModelException("No ONNX model was specified. Please provide a model path or byte array.", nameof(YoloOptions));
 
-            ConfigureOrtEnv();
+            ConfigureOrtEnv(loglevel);
             InjectModelIntoExecutionProvider();
 
             _runOptions = new RunOptions();
@@ -71,14 +74,20 @@ namespace YoloDotNet.Core
             FrameSaveService.Start();
         }
 
-        private static void ConfigureOrtEnv()
+        private static void ConfigureOrtEnv(OrtLoggingLevel loglevel)
         {
             try
             {
                 // Log errors and fatals
                 var envOptions = new EnvironmentCreationOptions
                 {
-                    logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
+                    //logLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_ERROR
+                    logLevel = loglevel,
+                    loggingFunction = (param, level, category, logId, codeLocation, message) =>
+                    {
+                        // You can customize logging behavior here
+                        Console.WriteLine($"ONNX Runtime [{level}] {category} - {logId}: {message}");
+                    }
                 };
 
                 OrtEnv.CreateInstanceWithOptions(ref envOptions);

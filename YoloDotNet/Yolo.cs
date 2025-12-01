@@ -8,11 +8,12 @@ namespace YoloDotNet
     /// Initializes a new instance of YoloDotNet.
     /// </summary>
     /// <param name="options">Options for initializing the YoloDotNet model.</param>
-    public class Yolo(YoloOptions options) : IDisposable
+    public class Yolo(YoloOptions options, OrtLoggingLevel loglevel) : IDisposable
     {
         #region Private fields
 
-        private readonly IModule _detection = ModuleFactory.CreateModule(options);
+        private OrtLoggingLevel _logLevel = loglevel;
+        private readonly IModule _detection = ModuleFactory.CreateModule(options, loglevel);
         private FFmpegService _ffmpegService = default!;
 
         #endregion
