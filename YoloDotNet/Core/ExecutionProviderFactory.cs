@@ -12,12 +12,14 @@ namespace YoloDotNet.Core
             {
                 GraphOptimizationLevel = GraphOptimizationLevel.ORT_ENABLE_ALL,
                 ExecutionMode = ExecutionMode.ORT_SEQUENTIAL,
-                InterOpNumThreads = 1,
+                InterOpNumThreads = 5,
                 IntraOpNumThreads = Environment.ProcessorCount,
 
                 EnableMemoryPattern = true,
                 LogSeverityLevel = OrtLoggingLevel.ORT_LOGGING_LEVEL_VERBOSE,
                 LogVerbosityLevel = 4,
+                EnableCpuMemArena = false,
+                EnableProfiling = false,
             };
 
             switch (config)
@@ -70,7 +72,7 @@ namespace YoloDotNet.Core
                 { "device_id", gpuId.ToString() },
                 // Specifies which GPU device to use (default = 0 if not set).
 
-                { "gpu_mem_limit", memorylimit.ToString() },
+                { "gpu_mem_limit", memorylimit.ToString() },    
                 // see https://onnxruntime.ai/docs/execution-providers/CUDA-ExecutionProvider.html#c
 
                 { "arena_extend_strategy", arenaStrategy }, 
